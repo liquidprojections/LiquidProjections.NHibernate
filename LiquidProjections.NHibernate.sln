@@ -1,0 +1,42 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26403.7
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{27C8B175-6555-4591-87B1-177A2874FEA9}"
+	ProjectSection(SolutionItems) = preProject
+		NuGet.Config = NuGet.Config
+		SharedAssemblyInfo.cs = SharedAssemblyInfo.cs
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Src", "Src", "{AE89AB5E-BC68-4AA3-9183-A222AC81691C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Specs", "Specs", "{15D45AC7-E234-431A-8EF9-0A3311A33926}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiquidProjections.NHibernate", "Src\LiquidProjections.NHibernate\LiquidProjections.NHibernate.csproj", "{F5953539-5C27-4A7C-89BD-7FBE4A67915A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiquidProjections.NHibernate.Specs", "Tests\LiquidProjections.NHibernate.Specs\LiquidProjections.NHibernate.Specs.csproj", "{86D27EE2-9884-4E09-B6A7-5D959F9F836B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F5953539-5C27-4A7C-89BD-7FBE4A67915A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F5953539-5C27-4A7C-89BD-7FBE4A67915A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F5953539-5C27-4A7C-89BD-7FBE4A67915A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F5953539-5C27-4A7C-89BD-7FBE4A67915A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{86D27EE2-9884-4E09-B6A7-5D959F9F836B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{86D27EE2-9884-4E09-B6A7-5D959F9F836B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{86D27EE2-9884-4E09-B6A7-5D959F9F836B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{86D27EE2-9884-4E09-B6A7-5D959F9F836B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F5953539-5C27-4A7C-89BD-7FBE4A67915A} = {AE89AB5E-BC68-4AA3-9183-A222AC81691C}
+		{86D27EE2-9884-4E09-B6A7-5D959F9F836B} = {15D45AC7-E234-431A-8EF9-0A3311A33926}
+	EndGlobalSection
+EndGlobal
