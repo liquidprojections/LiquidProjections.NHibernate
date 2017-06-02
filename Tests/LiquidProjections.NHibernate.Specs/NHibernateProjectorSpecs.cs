@@ -8,7 +8,8 @@ using Chill;
 using FluentAssertions;
 
 using FluentNHibernate.Mapping;
-
+using LiquidProjections.Abstractions;
+using LiquidProjections.Testing;
 using NHibernate;
 using NHibernate.Linq;
 
@@ -49,7 +50,10 @@ namespace LiquidProjections.NHibernate.Specs
                     Subject.StateKey = stateKey;
                 }
 
-                The<MemoryEventSource>().Subscribe(0, Subject.Handle, "");
+                The<MemoryEventSource>().Subscribe(0, new Subscriber
+                {
+                    HandleTransactions = Subject.Handle
+                }, "");
             }
         }
 
@@ -84,7 +88,7 @@ namespace LiquidProjections.NHibernate.Specs
                 {
                     ProductKey = "c350E",
                     Category = "Hybrid"
-                }), deferedExecution: true);
+                }), deferredExecution: true);
             }
 
             [Fact]
@@ -343,7 +347,7 @@ namespace LiquidProjections.NHibernate.Specs
                 {
                     ProductKey = "c350E",
                     Category = "Hybrid"
-                }), deferedExecution: true);
+                }), deferredExecution: true);
             }
 
             [Fact]
@@ -556,7 +560,7 @@ namespace LiquidProjections.NHibernate.Specs
                 When(() => The<MemoryEventSource>().Write(new ProductDiscontinuedEvent
                 {
                     ProductKey = "c350E",
-                }), deferedExecution: true);
+                }), deferredExecution: true);
             }
 
             [Fact]
@@ -1139,7 +1143,7 @@ namespace LiquidProjections.NHibernate.Specs
                     });
                 });
 
-                When(() => The<MemoryEventSource>().Write(The<Transaction>()), deferedExecution: true);
+                When(() => The<MemoryEventSource>().Write(The<Transaction>()), deferredExecution: true);
             }
 
             [Fact]
