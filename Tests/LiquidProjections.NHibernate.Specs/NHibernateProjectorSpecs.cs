@@ -40,7 +40,7 @@ namespace LiquidProjections.NHibernate.Specs
             protected void StartProjecting(string stateKey = null, INHibernateChildProjector[] children = null)
             {
                 WithSubject(_ => new NHibernateProjector<ProductCatalogEntry, string, ProjectorState>(
-                    The<ISessionFactory>().OpenSession, Events, children)
+                    The<ISessionFactory>().OpenSession, Events, (entry, id) => entry.Id = id, children)
                 {
                     BatchSize = 10
                 });
@@ -1021,7 +1021,8 @@ namespace LiquidProjections.NHibernate.Specs
                         .AsCreateOf(anEvent => anEvent.ProductKey)
                         .Using((entry, anEvent) => entry.Category = anEvent.Category);
 
-                    var childProjector = new NHibernateChildProjector<ProductCatalogChildEntry, string>(childMapBuilder);
+                    var childProjector = new NHibernateChildProjector<ProductCatalogChildEntry, string>(
+                        childMapBuilder, (childEntry, id) => childEntry.Id = id);
 
                     StartProjecting(children: new INHibernateChildProjector[] { childProjector });
                 });
@@ -1243,7 +1244,7 @@ namespace LiquidProjections.NHibernate.Specs
         }
     }
 
-    public class ProductCatalogEntry : IHaveIdentity<string>
+    public class ProductCatalogEntry
     {
         public virtual string Id { get; set; }
         public virtual string Category { get; set; }
@@ -1260,7 +1261,7 @@ namespace LiquidProjections.NHibernate.Specs
         }
     }
 
-    public class ProductCatalogChildEntry : IHaveIdentity<string>
+    public class ProductCatalogChildEntry
     {
         public virtual string Id { get; set; }
         public virtual string Category { get; set; }
