@@ -8,7 +8,8 @@ using Chill;
 using FluentAssertions;
 
 using FluentNHibernate.Mapping;
-
+using LiquidProjections.Abstractions;
+using LiquidProjections.Testing;
 using NHibernate;
 using NHibernate.Linq;
 
@@ -39,7 +40,7 @@ namespace LiquidProjections.NHibernate.Specs
             protected void StartProjecting(string stateKey = null, INHibernateChildProjector[] children = null)
             {
                 WithSubject(_ => new NHibernateProjector<ProductCatalogEntry, string, ProjectorState>(
-                    The<ISessionFactory>().OpenSession, Events, children)
+                    The<ISessionFactory>().OpenSession, Events, (entry, id) => entry.Id = id, children)
                 {
                     BatchSize = 10
                 });
@@ -49,7 +50,10 @@ namespace LiquidProjections.NHibernate.Specs
                     Subject.StateKey = stateKey;
                 }
 
-                The<MemoryEventSource>().Subscribe(0, Subject.Handle, "");
+                The<MemoryEventSource>().Subscribe(0, new Subscriber
+                {
+                    HandleTransactions = Subject.Handle
+                }, "");
             }
         }
 
@@ -84,7 +88,7 @@ namespace LiquidProjections.NHibernate.Specs
                 {
                     ProductKey = "c350E",
                     Category = "Hybrid"
-                }), deferedExecution: true);
+                }), deferredExecution: true);
             }
 
             [Fact]
@@ -343,7 +347,7 @@ namespace LiquidProjections.NHibernate.Specs
                 {
                     ProductKey = "c350E",
                     Category = "Hybrid"
-                }), deferedExecution: true);
+                }), deferredExecution: true);
             }
 
             [Fact]
@@ -556,7 +560,7 @@ namespace LiquidProjections.NHibernate.Specs
                 When(() => The<MemoryEventSource>().Write(new ProductDiscontinuedEvent
                 {
                     ProductKey = "c350E",
-                }), deferedExecution: true);
+                }), deferredExecution: true);
             }
 
             [Fact]
@@ -1017,7 +1021,8 @@ namespace LiquidProjections.NHibernate.Specs
                         .AsCreateOf(anEvent => anEvent.ProductKey)
                         .Using((entry, anEvent) => entry.Category = anEvent.Category);
 
-                    var childProjector = new NHibernateChildProjector<ProductCatalogChildEntry, string>(childMapBuilder);
+                    var childProjector = new NHibernateChildProjector<ProductCatalogChildEntry, string>(
+                        childMapBuilder, (childEntry, id) => childEntry.Id = id);
 
                     StartProjecting(children: new INHibernateChildProjector[] { childProjector });
                 });
@@ -1139,7 +1144,7 @@ namespace LiquidProjections.NHibernate.Specs
                     });
                 });
 
-                When(() => The<MemoryEventSource>().Write(The<Transaction>()), deferedExecution: true);
+                When(() => The<MemoryEventSource>().Write(The<Transaction>()), deferredExecution: true);
             }
 
             [Fact]
@@ -1239,7 +1244,7 @@ namespace LiquidProjections.NHibernate.Specs
         }
     }
 
-    public class ProductCatalogEntry : IHaveIdentity<string>
+    public class ProductCatalogEntry
     {
         public virtual string Id { get; set; }
         public virtual string Category { get; set; }
@@ -1256,7 +1261,7 @@ namespace LiquidProjections.NHibernate.Specs
         }
     }
 
-    public class ProductCatalogChildEntry : IHaveIdentity<string>
+    public class ProductCatalogChildEntry
     {
         public virtual string Id { get; set; }
         public virtual string Category { get; set; }

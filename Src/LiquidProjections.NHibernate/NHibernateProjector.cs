@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-
+using LiquidProjections.Abstractions;
 using NHibernate;
 
 namespace LiquidProjections.NHibernate
@@ -17,7 +17,7 @@ namespace LiquidProjections.NHibernate
     /// Throws <see cref="ProjectionException"/> when it detects errors in the event handlers.
     /// </summary>
     public sealed class NHibernateProjector<TProjection, TKey, TState>
-        where TProjection : class, IHaveIdentity<TKey>, new()
+        where TProjection : class, new()
         where TState : class, IProjectorState, new()
     {
         private readonly Func<ISession> sessionFactory;
@@ -40,11 +40,11 @@ namespace LiquidProjections.NHibernate
         /// in the same transaction just before the parent projector.</param>
         public NHibernateProjector(
             Func<ISession> sessionFactory,
-            IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder,
+            IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder, Action<TProjection, TKey> setIdentity,
             IEnumerable<INHibernateChildProjector> children = null)
         {
             this.sessionFactory = sessionFactory;
-            mapConfigurator = new NHibernateEventMapConfigurator<TProjection, TKey>(mapBuilder, children);
+            mapConfigurator = new NHibernateEventMapConfigurator<TProjection, TKey>(mapBuilder, setIdentity, children);
         }
 
         /// <summary>
@@ -103,7 +103,7 @@ namespace LiquidProjections.NHibernate
         /// Instructs the projector to project a collection of ordered transactions asynchronously
         /// in batches of the configured size <see cref="BatchSize"/>.
         /// </summary>
-        public async Task Handle(IReadOnlyList<Transaction> transactions)
+        public async Task Handle(IReadOnlyList<Transaction> transactions, SubscriptionInfo subscription)
         {
             if (transactions == null)
             {

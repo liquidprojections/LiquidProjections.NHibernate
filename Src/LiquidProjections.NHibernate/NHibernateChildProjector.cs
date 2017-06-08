@@ -11,7 +11,7 @@ namespace LiquidProjections.NHibernate
     /// Throws <see cref="ProjectionException"/> when it detects errors in the event handlers.
     /// </summary>
     public sealed class NHibernateChildProjector<TProjection, TKey> : INHibernateChildProjector
-        where TProjection : class, IHaveIdentity<TKey>, new()
+        where TProjection : class, new()
     {
         private readonly NHibernateEventMapConfigurator<TProjection, TKey> mapConfigurator;
 
@@ -27,10 +27,10 @@ namespace LiquidProjections.NHibernate
         /// <param name="children">An optional collection of <see cref="INHibernateChildProjector"/> which project events
         /// in the same transaction just before the parent projector.</param>
         public NHibernateChildProjector(
-            IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder,
+            IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder, Action<TProjection, TKey> setIdentity,
             IEnumerable<INHibernateChildProjector> children = null)
         {
-            mapConfigurator = new NHibernateEventMapConfigurator<TProjection, TKey>(mapBuilder, children);
+            mapConfigurator = new NHibernateEventMapConfigurator<TProjection, TKey>(mapBuilder, setIdentity, children);
         }
 
         async Task INHibernateChildProjector.ProjectEvent(object anEvent, NHibernateProjectionContext context)

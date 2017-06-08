@@ -6,15 +6,17 @@ using System.Threading.Tasks;
 namespace LiquidProjections.NHibernate
 {
     internal sealed class NHibernateEventMapConfigurator<TProjection, TKey>
-        where TProjection : class, IHaveIdentity<TKey>, new()
+        where TProjection : class, new()
     {
+        private readonly Action<TProjection, TKey> setIdentity;
         private readonly IEventMap<NHibernateProjectionContext> map;
         private readonly IEnumerable<INHibernateChildProjector> children;
 
         public NHibernateEventMapConfigurator(
-            IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder,
+            IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder, Action<TProjection, TKey> setIdentity,
             IEnumerable<INHibernateChildProjector> children = null)
         {
+            this.setIdentity = setIdentity;
             if (mapBuilder == null)
             {
                 throw new ArgumentNullException(nameof(mapBuilder));
@@ -44,7 +46,9 @@ namespace LiquidProjections.NHibernate
                 {
                     case MissingProjectionModificationBehavior.Create:
                     {
-                        projection = new TProjection { Id = key };
+                        projection = new TProjection();
+                        setIdentity(projection, key);
+
                         await projector(projection).ConfigureAwait(false);
                         context.Session.Save(projection);
                         break;
