@@ -15,9 +15,9 @@ namespace LiquidProjections.NHibernate.Specs
     {
         public ProjectorStateClassMap()
         {
-            Id(projectorState => projectorState.Id).Not.Nullable().Length(150);
-            Map(projectorState => projectorState.Checkpoint);
-            Map(projectorState => projectorState.LastUpdateUtc);
+            Id(x => x.Id).Not.Nullable().Length(150);
+            Map(x => x.Checkpoint);
+            Map(x => x.LastUpdateUtc);
         }
     }
 }

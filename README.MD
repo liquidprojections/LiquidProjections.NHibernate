@@ -1,22 +1,20 @@
-# Liquid Projections [![Build status](https://ci.appveyor.com/api/projects/status/85nutadfiq44bwq1?svg=true)](https://ci.appveyor.com/project/dennisdoomen/liquidprojections)
+# Liquid Projections for NHibernate [![Build status](https://ci.appveyor.com/api/projects/status/8shaimqx3u366bji/branch/master?svg=true)](https://ci.appveyor.com/project/dennisdoomen/liquidprojections-nhibernate-69l6u/branch/master)
 
 ## What is this?
-Liquid Projections is designed as a library (and not a framework) that should help you write maintainable projection code in an [event sourcing](https://www.martinfowler.com/eaaDev/EventSourcing.html) architecture. After [evaluating](http://www.continuousimprover.com/2016/06/event-sourcing-from-trenches-projections.html) several years of working with an event sourced architecture, I decided I needed a fresh start. This project has been designed based on the following principles:
-
-* Designed as a library which doesn't hide the magic behind abstractions and tries to avoid the need to sub-class anything. 
-* Projections must be autonomous so whether a projector stores its projections in-memory, in RavenDB or in a RDBMS is a local concern. 
-* Similarly, whether it restarts from scratch every time or stores progress information in-between is a decision each projection can make.
-* Is distributed as separate NuGet packages so that you don't need to take dependencies on stuff you don't need. 
-* `async` all the way
+This [package](https://www.nuget.org/packages/LiquidProjections.NHibernate/) provides an `NHibernateProjector` that allows you to build [NHibernate]((https://www.nuget.org/packages/NHibernate/))-backed projectors for use with [LiquidProjections'](https://github.com/liquidprojections/LiquidProjections) event mapping API and `Dispatcher` class.
 
 ## What does it offer?
-Liquid Projections offers several components that are designed to be used independently.
-* An `EventMapBuilder` to fluently build an `EventMap` that defines how events should be handled during projection. 
-* A thin abstraction named `IEventStore` to represent an event store. Currently only NEventStore is supported as well as a in-memory event store for testing purposes. 
-* Projector classes for RavenDB, NHibernate as well as an agnostic Projector that you can use *within* your projectors. 
-* Support for look-ups by allowing you to nest projectors.
-* A `Dispatcher` that can be used to connect an `IEventStore` implementation with a projector. 
-* A `ProjectionException` that provides everything you would like to know to understand why a projection fails. 
+* Supports NHibernate 4.0 or later. 
+* Allows customizing how many LiquidProjections [Transaction](https://github.com/liquidprojections/LiquidProjections/blob/master/Src/LiquidProjections.Abstractions/Transaction.cs)s it should process in a single database transaction.
+* Supports nesting one or more `NHibernateChildProjector`s that can be used for maintaining lookup tables and which are part of the same database transaction as the parent projector creates.
+* Ensures autonomy by storing the  `IProjectionState` (e.g. the last transaction checkpoint) in the same transaction as the actual projection data.
+* Provides a simple caching mechanism in the form of the `IProjectionCache` and ships with the `LruProjectionCache` based on the [FluidCaching](https://www.nuget.org/packages/FluidCaching.Sources/) project.
+* Exposes the `ShouldRetry` delegate so that you can handle projection exceptions and get full control on whether or not the projector should retry (again).
+
+## Are there any limitations?
+* The `IProjectionCache` is meant for the most common scenarios and thus has some limitations. If you need more advanced caching, please refer to NHibernate's [Second Level Caching](http://nhibernate.info/doc/nhibernate-reference/caches.html) feature.
+   * If the projector performs database modifications directly on the NHibernate `ISession`, that projector must make sure the cache is updated or cleared accordingly.
+   * The cache doesn't understand relationships where a projection refers to another projection maintained by the same projector. For instance, a projector that maintains a graph of parents and children, where a child is also a (direct or indirect) parent must use a more advanced type of caching. 
 
 ## How to get started?
-For now, please review the unit tests. 
+Check out the [unit tests](https://github.com/liquidprojections/LiquidProjections.NHibernate/blob/master/Tests/LiquidProjections.NHibernate.Specs/NHibernateProjectorSpecs.cs) to learn how the many features work together. You can also look at the non-NHibernate example [here](https://github.com/liquidprojections/LiquidProjections/blob/master/Samples/ExampleHost/ExampleProjector.cs#L25) and replace `Projector` with `NHibernateProjector`. A proper example project for NHibernate is [planned](https://github.com/liquidprojections/LiquidProjections.NHibernate/issues/5).

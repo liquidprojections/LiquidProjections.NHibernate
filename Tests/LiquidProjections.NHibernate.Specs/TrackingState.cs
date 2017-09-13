@@ -16,10 +16,15 @@ namespace LiquidProjections.NHibernate.Specs
     {
         public TrackingStateClassMap()
         {
-            Id(projectorState => projectorState.Id).GeneratedBy.Identity();
-            Map(projectorState => projectorState.ProjectorId).Not.Nullable().Length(150).Index("IX_TrackingState_ProjectorId");
-            Map(projectorState => projectorState.Checkpoint);
-            Map(projectorState => projectorState.LastUpdateUtc);
+            Id(x => x.Id).GeneratedBy.Identity();
+            
+            Map(x => x.ProjectorId)
+                .Not.Nullable()
+                .Length(150)
+                .Index("IX_TrackingState_ProjectorId");
+            
+            Map(x => x.Checkpoint);
+            Map(x => x.LastUpdateUtc);
         }
     }
 }
