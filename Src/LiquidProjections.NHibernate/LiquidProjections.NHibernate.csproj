@@ -43,11 +43,11 @@
       <HintPath>..\..\packages\Iesi.Collections.4.0.0.4000\lib\net40\Iesi.Collections.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="LiquidProjections, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\LiquidProjections.2.0.0\lib\netstandard1.1\LiquidProjections.dll</HintPath>
+    <Reference Include="LiquidProjections, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.2.3.0\lib\netstandard1.1\LiquidProjections.dll</HintPath>
     </Reference>
-    <Reference Include="LiquidProjections.Abstractions, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\LiquidProjections.Abstractions.2.0.0\lib\netstandard1.1\LiquidProjections.Abstractions.dll</HintPath>
+    <Reference Include="LiquidProjections.Abstractions, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.Abstractions.2.3.0\lib\netstandard1.1\LiquidProjections.Abstractions.dll</HintPath>
     </Reference>
     <Reference Include="NHibernate, Version=4.0.0.4000, Culture=neutral, PublicKeyToken=aa95f207798dfdb4, processorArchitecture=MSIL">
       <HintPath>..\..\packages\NHibernate.4.0.4.4000\lib\net40\NHibernate.dll</HintPath>
