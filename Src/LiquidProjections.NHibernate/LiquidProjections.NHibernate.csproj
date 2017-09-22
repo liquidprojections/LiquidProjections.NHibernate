@@ -24,7 +24,7 @@
     <DocumentationFile>bin\Debug\LiquidProjections.NHibernate.XML</DocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>1571, 1591, 1570, 1573</NoWarn>
-    <LangVersion>6</LangVersion>
+    <LangVersion>7</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -36,22 +36,21 @@
     <DocumentationFile>bin\Release\LiquidProjections.NHibernate.XML</DocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>1571, 1591, 1570, 1573</NoWarn>
-    <LangVersion>6</LangVersion>
+    <LangVersion>7</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Iesi.Collections, Version=4.0.0.0, Culture=neutral, PublicKeyToken=aa95f207798dfdb4, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Iesi.Collections.4.0.0.4000\lib\net40\Iesi.Collections.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="LiquidProjections, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\LiquidProjections.2.0.0\lib\netstandard1.1\LiquidProjections.dll</HintPath>
+    <Reference Include="LiquidProjections, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.2.3.0\lib\netstandard1.1\LiquidProjections.dll</HintPath>
     </Reference>
-    <Reference Include="LiquidProjections.Abstractions, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\LiquidProjections.Abstractions.2.0.0\lib\netstandard1.1\LiquidProjections.Abstractions.dll</HintPath>
+    <Reference Include="LiquidProjections.Abstractions, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.Abstractions.2.3.0\lib\netstandard1.1\LiquidProjections.Abstractions.dll</HintPath>
     </Reference>
     <Reference Include="NHibernate, Version=4.0.0.4000, Culture=neutral, PublicKeyToken=aa95f207798dfdb4, processorArchitecture=MSIL">
       <HintPath>..\..\packages\NHibernate.4.0.4.4000\lib\net40\NHibernate.dll</HintPath>
-      <Private>True</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
@@ -68,7 +67,10 @@
       <Link>SharedAssemblyInfo.cs</Link>
     </Compile>
     <Compile Include="App_Packages\FluidCaching.Sources\FluidCaching.cs" />
+    <Compile Include="IProjectionCache.cs" />
     <Compile Include="EnumerableExtensions.cs" />
+    <Compile Include="LruProjectionCache.cs" />
+    <Compile Include="PassthroughCache.cs" />
     <Compile Include="ShouldRetry.cs" />
     <Compile Include="INHibernateChildProjector.cs" />
     <Compile Include="IProjectorState.cs" />

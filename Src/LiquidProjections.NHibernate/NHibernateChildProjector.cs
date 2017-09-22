@@ -33,6 +33,15 @@ namespace LiquidProjections.NHibernate
             mapConfigurator = new NHibernateEventMapConfigurator<TProjection, TKey>(mapBuilder, setIdentity, children);
         }
 
+        /// <summary>
+        /// A cache that can be used to avoid loading projections from the database.
+        /// </summary>
+        public IProjectionCache<TProjection, TKey> Cache
+        {
+            get => mapConfigurator.Cache;
+            set => mapConfigurator.Cache = value ?? throw new ArgumentNullException(nameof(value), "A cache cannot be null");
+        }
+
         async Task INHibernateChildProjector.ProjectEvent(object anEvent, NHibernateProjectionContext context)
         {
             if (anEvent == null)

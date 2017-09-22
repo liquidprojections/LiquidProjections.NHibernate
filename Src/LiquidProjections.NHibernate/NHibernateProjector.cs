@@ -52,7 +52,7 @@ namespace LiquidProjections.NHibernate
         /// </summary>
         public int BatchSize
         {
-            get { return batchSize; }
+            get => batchSize;
             set
             {
                 if (value < 1)
@@ -64,12 +64,13 @@ namespace LiquidProjections.NHibernate
             }
         }
 
+
         /// <summary>
         /// The key to store the projector state as <typeparamref name="TState"/>.
         /// </summary>
         public string StateKey
         {
-            get { return stateKey; }
+            get => stateKey;
             set
             {
                 if (string.IsNullOrEmpty(value))
@@ -87,16 +88,17 @@ namespace LiquidProjections.NHibernate
         /// </summary>
         public ShouldRetry ShouldRetry
         {
-            get { return shouldRetry; }
-            set
-            {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value), "Retry policy is missing.");
-                }
+            get => shouldRetry;
+            set => shouldRetry = value ?? throw new ArgumentNullException(nameof(value), "Retry policy is missing.");
+        }
 
-                shouldRetry = value;
-            }
+        /// <summary>
+        /// A cache that can be used to avoid loading projections from the database.
+        /// </summary>
+        public IProjectionCache<TProjection, TKey> Cache
+        {
+            get => mapConfigurator.Cache;
+            set => mapConfigurator.Cache = value ?? throw new ArgumentNullException(nameof(value), "A cache cannot be null");
         }
 
         /// <summary>
@@ -118,7 +120,7 @@ namespace LiquidProjections.NHibernate
 
         private async Task ExecuteWithRetry(Func<Task> action)
         {
-            for (int attempt = 1;;attempt++)
+            for (int attempt = 1;; attempt++)
             {
                 try
                 {
@@ -154,12 +156,16 @@ namespace LiquidProjections.NHibernate
             }
             catch (ProjectionException projectionException)
             {
+                Cache.Clear();
+                
                 projectionException.Projector = typeof(TProjection).ToString();
                 projectionException.SetTransactionBatch(batch);
                 throw;
             }
             catch (Exception exception)
             {
+                Cache.Clear();
+
                 var projectionException = new ProjectionException("Projector failed to project transaction batch.", exception)
                 {
                     Projector = typeof(TProjection).ToString()
@@ -211,7 +217,7 @@ namespace LiquidProjections.NHibernate
             try
             {
                 TState existingState = session.Get<TState>(StateKey);
-                TState state = existingState ?? new TState { Id = StateKey };
+                TState state = existingState ?? new TState {Id = StateKey};
                 state.Checkpoint = transaction.Checkpoint;
                 state.LastUpdateUtc = DateTime.UtcNow;
 

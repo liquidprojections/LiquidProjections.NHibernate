@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Threading.Tasks;
+using NHibernate;
+using NHibernate.Util;
 
 namespace LiquidProjections.NHibernate
 {
@@ -11,6 +14,7 @@ namespace LiquidProjections.NHibernate
         private readonly Action<TProjection, TKey> setIdentity;
         private readonly IEventMap<NHibernateProjectionContext> map;
         private readonly IEnumerable<INHibernateChildProjector> children;
+        private IProjectionCache<TProjection, TKey> cache = new PassthroughCache<TProjection, TKey>();
 
         public NHibernateEventMapConfigurator(
             IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder, Action<TProjection, TKey> setIdentity,
@@ -26,6 +30,12 @@ namespace LiquidProjections.NHibernate
             this.children = children?.ToList() ?? new List<INHibernateChildProjector>();
         }
 
+        public IProjectionCache<TProjection, TKey> Cache
+        {
+            get => cache;
+            set => cache = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
         private IEventMap<NHibernateProjectionContext> BuildMap(
             IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder)
         {
@@ -38,8 +48,7 @@ namespace LiquidProjections.NHibernate
         private async Task HandleProjectionModification(TKey key, NHibernateProjectionContext context,
             Func<TProjection, Task> projector, ProjectionModificationOptions options)
         {
-            TProjection projection = context.Session.Get<TProjection>(key);
-
+            TProjection projection = await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
             if (projection == null)
             {
                 switch (options.MissingProjectionBehavior)
@@ -51,6 +60,7 @@ namespace LiquidProjections.NHibernate
 
                         await projector(projection).ConfigureAwait(false);
                         context.Session.Save(projection);
+                        cache.Add(projection);
                         break;
                     }
 
@@ -74,6 +84,8 @@ namespace LiquidProjections.NHibernate
             }
             else
             {
+                context.Session.Lock(projection, LockMode.None);
+
                 switch (options.ExistingProjectionBehavior)
                 {
                     case ExistingProjectionModificationBehavior.Update:
@@ -102,10 +114,11 @@ namespace LiquidProjections.NHibernate
             }
         }
 
-        private Task HandleProjectionDeletion(TKey key, NHibernateProjectionContext context,
+        private async Task HandleProjectionDeletion(TKey key, NHibernateProjectionContext context,
             ProjectionDeletionOptions options)
         {
-            TProjection existingProjection = context.Session.Get<TProjection>(key);
+            TProjection existingProjection = 
+                await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
 
             if (existingProjection == null)
             {
@@ -132,9 +145,8 @@ namespace LiquidProjections.NHibernate
             else
             {
                 context.Session.Delete(existingProjection);
+                cache.Remove(key);
             }
-
-            return Task.FromResult(false);
         }
 
         public async Task ProjectEvent(object anEvent, NHibernateProjectionContext context)
