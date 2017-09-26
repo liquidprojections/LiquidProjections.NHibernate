@@ -93,6 +93,14 @@ namespace LiquidProjections.NHibernate
         }
 
         /// <summary>
+        /// Allows enriching the projector state with additional details before the updated state is written to the database.
+        /// </summary>
+        /// <remarks>
+        /// Is called before the transaction wrapping a batch of transactions is committed.
+        /// </remarks>
+        public EnrichState<TState> EnrichState { get; set; } = (state, transaction) => {};
+
+        /// <summary>
         /// A cache that can be used to avoid loading projections from the database.
         /// </summary>
         public IProjectionCache<TProjection, TKey> Cache
@@ -225,6 +233,8 @@ namespace LiquidProjections.NHibernate
                 {
                     session.Save(state);
                 }
+
+                EnrichState(state, transaction);
             }
             catch (Exception exception)
             {
@@ -243,4 +253,19 @@ namespace LiquidProjections.NHibernate
             }
         }
     }
+
+    /// <summary>
+    /// A delegate that can be implemented to retry projecting a batch of transactions when it fails.
+    /// </summary>
+    /// <returns>Returns true if the projector should retry to project the batch of transactions, false if it shoud fail with the specified exception.</returns>
+    /// <param name="exception">The exception that occured that caused this batch to fail.</param>
+    /// <param name="attempts">The number of attempts that were made to project this batch of transactions.</param>
+    public delegate Task<bool> ShouldRetry(ProjectionException exception, int attempts);
+
+    /// <summary>
+    /// Defines the signature of a method that can be used to update the projection state as explained 
+    /// in <see cref="NHibernateProjector{TProjection,TKey,TState}.EnrichState"/>.
+    /// </summary>
+    public delegate void EnrichState<in TState>(TState state, Transaction transaction)
+        where TState : IProjectorState;
 }

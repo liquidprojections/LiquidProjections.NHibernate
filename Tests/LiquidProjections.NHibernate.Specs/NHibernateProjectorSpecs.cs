@@ -21,6 +21,7 @@ namespace LiquidProjections.NHibernate.Specs
             protected EventMapBuilder<ProductCatalogEntry, string, NHibernateProjectionContext> Events;
             protected LruProjectionCache<ProductCatalogEntry, string> Cache;
             protected Exception ProjectionException = null;
+            private readonly List<INHibernateChildProjector> children = new List<INHibernateChildProjector>();
 
             public Given_a_sqlite_projector_with_an_in_memory_event_source()
             {
@@ -35,26 +36,26 @@ namespace LiquidProjections.NHibernate.Specs
                         () => DateTime.UtcNow);
 
                     Events = new EventMapBuilder<ProductCatalogEntry, string, NHibernateProjectionContext>();
+
+                    WithSubject(_ =>
+                    {
+                        return new NHibernateProjector<ProductCatalogEntry, string, ProjectorState>(
+                            The<ISessionFactory>().OpenSession, Events, (entry, id) => entry.Id = id, children)
+                        {
+                            BatchSize = 10,
+                            Cache = Cache,
+                        };
+                    });
                 });
             }
 
-            protected void StartProjecting(string stateKey = null, INHibernateChildProjector[] children = null)
+            protected void AddChildProjector(INHibernateChildProjector childProjector)
             {
-                WithSubject(_ =>
-                {
-                    return new NHibernateProjector<ProductCatalogEntry, string, ProjectorState>(
-                        The<ISessionFactory>().OpenSession, Events, (entry, id) => entry.Id = id, children)
-                    {
-                        BatchSize = 10,
-                        Cache = Cache,
-                    };
-                });
+                children.Add(childProjector);
+            }
 
-                if (!string.IsNullOrEmpty(stateKey))
-                {
-                    Subject.StateKey = stateKey;
-                }
-
+            protected void StartProjecting()
+            {
                 The<MemoryEventSource>().Subscribe(0, new Subscriber
                 {
                     HandleTransactions = async (transactions, info) =>
@@ -88,12 +89,12 @@ namespace LiquidProjections.NHibernate.Specs
                         Id = "c350E",
                         Category = "Gas"
                     });
-
-                    StartProjecting();
                 });
 
                 When(async () =>
                 {
+                    StartProjecting();
+
                     await The<MemoryEventSource>().Write(new ProductAddedToCatalogEvent
                     {
                         ProductKey = "c350E",
@@ -1118,7 +1119,9 @@ namespace LiquidProjections.NHibernate.Specs
                         .Using((productCatalogEntry, productAddedToCatalogEvent, context) =>
                             productCatalogEntry.Category = productAddedToCatalogEvent.Category);
 
-                    StartProjecting(stateKey: "CatalogEntries");
+                    Subject.StateKey = "CatalogEntries";
+
+                    StartProjecting();
                 });
 
                 When(() => The<MemoryEventSource>().Write(new ProductAddedToCatalogEvent
@@ -1138,6 +1141,56 @@ namespace LiquidProjections.NHibernate.Specs
                 }
             }
         }
+
+        public class When_the_projector_state_is_enriched : Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            public When_the_projector_state_is_enriched()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .Using((p, @event, context) => p.Category = @event.Category);
+
+                    Subject.EnrichState = (state, transaction) =>
+                    {
+                        state.LastStreamId = transaction.StreamId;
+                    };
+                });
+
+                When(() =>
+                {
+                    StartProjecting();
+
+                    return The<MemoryEventSource>().Write(new Transaction
+                    {
+                        StreamId = "Product1",
+                        Events = new[]
+                        {
+                             new EventEnvelope
+                             {
+                                 Body = new ProductAddedToCatalogEvent
+                                {
+                                    ProductKey = "c350E",
+                                    Category = "Hybrid"
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+
+            [Fact]
+            public void Then_it_should_store_the_custom_property_along_with_the_state()
+            {
+                using (var session = The<ISessionFactory>().OpenSession())
+                {
+                    ProjectorState projectorState = session.Get<ProjectorState>(Subject.StateKey);
+                    projectorState.LastStreamId.Should().Be("Product1");
+                }
+            }
+        }
+
 
         public class When_an_event_has_a_header : Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1262,14 +1315,14 @@ namespace LiquidProjections.NHibernate.Specs
                         .AsCreateOf(anEvent => anEvent.ProductKey)
                         .Using((entry, anEvent) => entry.Category = anEvent.Category);
 
-                    var childProjector = new NHibernateChildProjector<ProductCatalogChildEntry, string>(
-                        childMapBuilder, (childEntry, id) => childEntry.Id = id);
-
-                    StartProjecting(children: new INHibernateChildProjector[] {childProjector});
+                    AddChildProjector(new NHibernateChildProjector<ProductCatalogChildEntry, string>(
+                        childMapBuilder, (childEntry, id) => childEntry.Id = id));
                 });
 
                 When(async () =>
                 {
+                    StartProjecting();
+
                     var transaction1 = new Transaction
                     {
                         Events = new[]
@@ -1374,13 +1427,13 @@ namespace LiquidProjections.NHibernate.Specs
                     childCache = new LruProjectionCache<ProductCatalogChildEntry, string>(1000, 1.Hours(), 2.Hours(), e => e.Id,
                         () => DateTime.UtcNow);
 
-                    var childProjector = new NHibernateChildProjector<ProductCatalogChildEntry, string>(
+                    AddChildProjector(new NHibernateChildProjector<ProductCatalogChildEntry, string>(
                         childMapBuilder, (childEntry, id) => childEntry.Id = id)
                     {
                         Cache = childCache
-                    };
+                    });
 
-                    StartProjecting(children: new INHibernateChildProjector[] {childProjector});
+                    StartProjecting();
                 });
 
                 When(async () =>
@@ -1630,6 +1683,8 @@ namespace LiquidProjections.NHibernate.Specs
         }
     }
 
+    #region Supporting Types
+
     public class ProductCatalogEntry
     {
         public virtual string Id { get; set; }
@@ -1686,4 +1741,6 @@ namespace LiquidProjections.NHibernate.Specs
     {
         public string Category { get; set; }
     }
+
+    #endregion
 }

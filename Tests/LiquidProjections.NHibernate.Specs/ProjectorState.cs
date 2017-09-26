@@ -9,6 +9,8 @@ namespace LiquidProjections.NHibernate.Specs
         public virtual string Id { get; set; }
         public virtual long Checkpoint { get; set; }
         public virtual DateTime LastUpdateUtc { get; set; }
+
+        public virtual string LastStreamId { get; set; }
     }
 
     internal sealed class ProjectorStateClassMap : ClassMap<ProjectorState>
@@ -18,6 +20,7 @@ namespace LiquidProjections.NHibernate.Specs
             Id(x => x.Id).Not.Nullable().Length(150);
             Map(x => x.Checkpoint);
             Map(x => x.LastUpdateUtc);
+            Map(x => x.LastStreamId);
         }
     }
 }
