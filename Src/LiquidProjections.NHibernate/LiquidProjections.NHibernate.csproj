@@ -71,7 +71,6 @@
     <Compile Include="EnumerableExtensions.cs" />
     <Compile Include="LruProjectionCache.cs" />
     <Compile Include="PassthroughCache.cs" />
-    <Compile Include="ShouldRetry.cs" />
     <Compile Include="INHibernateChildProjector.cs" />
     <Compile Include="IProjectorState.cs" />
     <Compile Include="ITrackingState.cs" />
