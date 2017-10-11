@@ -150,16 +150,15 @@ namespace LiquidProjections.NHibernate
             try
             {
                 using (ISession session = sessionFactory())
+                using (var tx = session.BeginTransaction()) 
                 {
-                    session.BeginTransaction();
-
                     foreach (Transaction transaction in batch)
                     {
                         await ProjectTransaction(transaction, session).ConfigureAwait(false);
                     }
 
                     StoreLastCheckpoint(session, batch.Last());
-                    session.Transaction.Commit();
+                    tx.Commit();
                 }
             }
             catch (ProjectionException projectionException)
