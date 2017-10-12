@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Chill;
@@ -20,7 +21,7 @@ namespace LiquidProjections.NHibernate.Specs
         {
             protected EventMapBuilder<ProductCatalogEntry, string, NHibernateProjectionContext> Events;
             protected LruProjectionCache<ProductCatalogEntry, string> Cache;
-            protected Exception ProjectionException = null;
+            protected Exception ProjectionException;
             private readonly List<INHibernateChildProjector> children = new List<INHibernateChildProjector>();
 
             public Given_a_sqlite_projector_with_an_in_memory_event_source()
@@ -1295,7 +1296,6 @@ namespace LiquidProjections.NHibernate.Specs
         public class When_there_is_a_child_projector :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
-            private Transaction transaction2;
             private readonly List<ChildProjectionState> childProjectionStates = new List<ChildProjectionState>();
 
             public When_there_is_a_child_projector()
@@ -1347,7 +1347,7 @@ namespace LiquidProjections.NHibernate.Specs
                         }
                     };
 
-                    transaction2 = new Transaction
+                    var transaction2 = new Transaction
                     {
                         Events = new[]
                         {
@@ -1644,6 +1644,59 @@ namespace LiquidProjections.NHibernate.Specs
             }
         }
 
+        public class When_retrying_a_transaction_that_was_already_handled :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            private ReadOnlyCollection<Transaction> transactions;
+            private SubscriptionInfo info;
+
+            public When_retrying_a_transaction_that_was_already_handled()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .Using((p, @event) =>
+                        {
+                            p.Category = @event.Category;
+                            p.Name = @event.Name;
+                        });
+                    
+                    
+                    Transaction transaction = new TransactionBuilder()
+                        .WithCheckpointNumber(5)
+                        .WithEvent(new ProductAddedToCatalogEvent
+                        {
+                            Category = "some category",
+                            Name = $"some product",
+                            ProductKey = $"some key",
+                        })
+                        .Build();
+                    
+                    transactions = new List<Transaction>
+                        {
+                            transaction
+                        }
+                        .AsReadOnly();
+                    info = new SubscriptionInfo();
+                    
+                    StartProjecting();
+                });
+
+                When(async () =>
+                {
+                    await Subject.Handle(transactions, info);
+                    await Subject.Handle(transactions, info);
+                }, DeferredExecution = true);
+            }
+
+            [Fact]
+            public void Then_it_should_not_handle_the_transactions()
+            {
+                WhenAction.ShouldNotThrow();
+            }
+        }
+
         public class When_a_projection_exception_occurs :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1814,7 +1867,8 @@ namespace LiquidProjections.NHibernate.Specs.NHibernateProjectorSpecs
 {
     public class TransactionBuilder
     {
-        private List<object> events = new List<object>();
+        private readonly List<object> events = new List<object>();
+        private long? checkpointNumber;
 
         public TransactionBuilder WithEvent(object @event)
         {
@@ -1824,13 +1878,26 @@ namespace LiquidProjections.NHibernate.Specs.NHibernateProjectorSpecs
 
         public Transaction Build()
         {
-            return new Transaction
+            Transaction transaction = new Transaction
             {
                 Events = events.Select(e => new EventEnvelope
                 {
                     Body = e
                 }).ToArray()
             };
+
+            if (checkpointNumber.HasValue)
+            {
+                transaction.Checkpoint = checkpointNumber.Value;
+            }
+
+            return transaction;
+        }
+
+        public TransactionBuilder WithCheckpointNumber(long checkpointNumber)
+        {
+            this.checkpointNumber = checkpointNumber;
+            return this;
         }
     }
 }
