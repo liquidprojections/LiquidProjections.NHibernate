@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Chill;
@@ -20,7 +21,7 @@ namespace LiquidProjections.NHibernate.Specs
         {
             protected EventMapBuilder<ProductCatalogEntry, string, NHibernateProjectionContext> Events;
             protected LruProjectionCache<ProductCatalogEntry, string> Cache;
-            protected Exception ProjectionException = null;
+            protected Exception ProjectionException;
             private readonly List<INHibernateChildProjector> children = new List<INHibernateChildProjector>();
 
             public Given_a_sqlite_projector_with_an_in_memory_event_source()
@@ -68,10 +69,12 @@ namespace LiquidProjections.NHibernate.Specs
                         {
                             ProjectionException = e;
                         }
-                    } 
+                    }
                 }, "");
             }
         }
+
+        #region Mapping Rules
 
         public class When_a_create_was_requested_but_the_database_already_contained_that_projection :
             Given_a_sqlite_projector_with_an_in_memory_event_source
@@ -151,7 +154,6 @@ namespace LiquidProjections.NHibernate.Specs
             {
                 ProjectionException.Should()
                     .BeOfType<ProjectionException>();
-
             }
         }
 
@@ -422,7 +424,7 @@ namespace LiquidProjections.NHibernate.Specs
 
                         session.Flush();
                     }
-                    
+
                     Cache.Add(new ProductCatalogEntry
                     {
                         Id = "c350E",
@@ -1108,6 +1110,10 @@ namespace LiquidProjections.NHibernate.Specs
             }
         }
 
+        #endregion
+
+        #region General 
+
         public class When_a_custom_state_key_is_set : Given_a_sqlite_projector_with_an_in_memory_event_source
         {
             public When_a_custom_state_key_is_set()
@@ -1167,9 +1173,9 @@ namespace LiquidProjections.NHibernate.Specs
                         StreamId = "Product1",
                         Events = new[]
                         {
-                             new EventEnvelope
-                             {
-                                 Body = new ProductAddedToCatalogEvent
+                            new EventEnvelope
+                            {
+                                Body = new ProductAddedToCatalogEvent
                                 {
                                     ProductKey = "c350E",
                                     Category = "Hybrid"
@@ -1283,10 +1289,13 @@ namespace LiquidProjections.NHibernate.Specs
             }
         }
 
+        #endregion
+
+        #region Child Projectors
+
         public class When_there_is_a_child_projector :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
-            private Transaction transaction2;
             private readonly List<ChildProjectionState> childProjectionStates = new List<ChildProjectionState>();
 
             public When_there_is_a_child_projector()
@@ -1338,7 +1347,7 @@ namespace LiquidProjections.NHibernate.Specs
                         }
                     };
 
-                    transaction2 = new Transaction
+                    var transaction2 = new Transaction
                     {
                         Events = new[]
                         {
@@ -1409,6 +1418,7 @@ namespace LiquidProjections.NHibernate.Specs
                 public bool Entry2Exists { get; set; }
             }
         }
+
         public class When_a_child_projector_has_its_own_cache :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1452,6 +1462,58 @@ namespace LiquidProjections.NHibernate.Specs
                 var cachedItem = await childCache.Get("c350E", () => Task.FromResult<ProductCatalogChildEntry>(null));
                 cachedItem.Should().NotBeNull();
                 cachedItem.Category.Should().Be("Hybrid");
+            }
+        }
+
+        #endregion
+
+        #region Exception Handling
+
+        public class When_any_exception_is_thrown :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            public When_any_exception_is_thrown()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .Using((p, @event) =>
+                        {
+                            p.Category = @event.Category;
+                            p.Name = @event.Name;
+                        });
+
+                    Events.Map<CategoryDiscontinuedEvent>().As((@event, context) => throw new InvalidOperationException());
+
+                    StartProjecting();
+                });
+
+                When(async () =>
+                {
+                    await The<MemoryEventSource>()
+                        .Write(new TransactionBuilder()
+                            .WithEvent(new ProductAddedToCatalogEvent
+                            {
+                                Category = "some category",
+                                Name = "some product",
+                                ProductKey = "some key",
+                            })
+                            .WithEvent(new CategoryDiscontinuedEvent
+                            {
+                                Category = "some category"
+                            })
+                            .Build());
+                });
+            }
+
+            [Fact]
+            public void Then_it_should_rollback_the_transaction()
+            {
+                using (var session = The<ISessionFactory>().OpenSession())
+                {
+                    session.QueryOver<ProductCatalogEntry>().List().Should().BeEmpty();
+                }
             }
         }
 
@@ -1581,6 +1643,60 @@ namespace LiquidProjections.NHibernate.Specs
                 succeeded.Should().BeTrue();
             }
         }
+
+        public class When_retrying_a_transaction_that_was_already_handled :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            private ReadOnlyCollection<Transaction> transactions;
+            private SubscriptionInfo info;
+
+            public When_retrying_a_transaction_that_was_already_handled()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .Using((p, @event) =>
+                        {
+                            p.Category = @event.Category;
+                            p.Name = @event.Name;
+                        });
+                    
+                    
+                    Transaction transaction = new TransactionBuilder()
+                        .WithCheckpointNumber(5)
+                        .WithEvent(new ProductAddedToCatalogEvent
+                        {
+                            Category = "some category",
+                            Name = $"some product",
+                            ProductKey = $"some key",
+                        })
+                        .Build();
+                    
+                    transactions = new List<Transaction>
+                        {
+                            transaction
+                        }
+                        .AsReadOnly();
+                    info = new SubscriptionInfo();
+                    
+                    StartProjecting();
+                });
+
+                When(async () =>
+                {
+                    await Subject.Handle(transactions, info);
+                    await Subject.Handle(transactions, info);
+                }, DeferredExecution = true);
+            }
+
+            [Fact]
+            public void Then_it_should_not_handle_the_transactions()
+            {
+                WhenAction.ShouldNotThrow();
+            }
+        }
+
         public class When_a_projection_exception_occurs :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1594,12 +1710,12 @@ namespace LiquidProjections.NHibernate.Specs
                     {
                         throw The<InvalidOperationException>();
                     });
-                    
+
                     Cache.Add(new ProductCatalogEntry
                     {
                         Id = "c350E"
                     });
-                  
+
                     StartProjecting();
                 });
 
@@ -1625,6 +1741,7 @@ namespace LiquidProjections.NHibernate.Specs
                 Cache.CurrentCount.Should().Be(0);
             }
         }
+
         public class When_a_database_exception_occurs : Given_a_sqlite_projector_with_an_in_memory_event_source
         {
             public When_a_database_exception_occurs()
@@ -1634,7 +1751,7 @@ namespace LiquidProjections.NHibernate.Specs
                     Events.Map<ProductAddedToCatalogEvent>()
                         .AsCreateOf(e => e.ProductKey)
                         .Using((p, e) => p.Name = e.Name);
-                    
+
                     using (ISession session = The<ISessionFactory>().OpenSession())
                     {
                         var entry = new ProductCatalogEntry
@@ -1647,12 +1764,12 @@ namespace LiquidProjections.NHibernate.Specs
                         session.Save(entry);
                         session.Flush();
                     }
-                    
+
                     Cache.Add(new ProductCatalogEntry
                     {
                         Id = "SomeOtherCachedId"
                     });
-                  
+
                     StartProjecting();
                 });
 
@@ -1666,7 +1783,6 @@ namespace LiquidProjections.NHibernate.Specs
                             Category = "Hybrids",
                             Name = "DuplicateNameThatWillThrowUniqueConstraintException"
                         });
-
                     }
                     catch
                     {
@@ -1681,6 +1797,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Cache.CurrentCount.Should().Be(0);
             }
         }
+
+        #endregion
     }
 
     #region Supporting Types
@@ -1743,4 +1861,43 @@ namespace LiquidProjections.NHibernate.Specs
     }
 
     #endregion
+}
+
+namespace LiquidProjections.NHibernate.Specs.NHibernateProjectorSpecs
+{
+    public class TransactionBuilder
+    {
+        private readonly List<object> events = new List<object>();
+        private long? checkpointNumber;
+
+        public TransactionBuilder WithEvent(object @event)
+        {
+            events.Add(@event);
+            return this;
+        }
+
+        public Transaction Build()
+        {
+            Transaction transaction = new Transaction
+            {
+                Events = events.Select(e => new EventEnvelope
+                {
+                    Body = e
+                }).ToArray()
+            };
+
+            if (checkpointNumber.HasValue)
+            {
+                transaction.Checkpoint = checkpointNumber.Value;
+            }
+
+            return transaction;
+        }
+
+        public TransactionBuilder WithCheckpointNumber(long checkpointNumber)
+        {
+            this.checkpointNumber = checkpointNumber;
+            return this;
+        }
+    }
 }

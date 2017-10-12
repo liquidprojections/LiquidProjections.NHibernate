@@ -119,8 +119,13 @@ namespace LiquidProjections.NHibernate
             {
                 throw new ArgumentNullException(nameof(transactions));
             }
+            
+            long? lastCheckpoint = GetLastCheckpoint();
+            IEnumerable<IList<Transaction>> transactionBatches = transactions
+                .Where(t => (!lastCheckpoint.HasValue) || (t.Checkpoint > lastCheckpoint))
+                .InBatchesOf(BatchSize);
 
-            foreach (IList<Transaction> batch in transactions.InBatchesOf(BatchSize))
+            foreach (IList<Transaction> batch in transactionBatches)
             {
                 await ExecuteWithRetry(() => ProjectTransactionBatch(batch)).ConfigureAwait(false);
             }
@@ -150,16 +155,15 @@ namespace LiquidProjections.NHibernate
             try
             {
                 using (ISession session = sessionFactory())
+                using (var tx = session.BeginTransaction())
                 {
-                    session.BeginTransaction();
-
                     foreach (Transaction transaction in batch)
                     {
                         await ProjectTransaction(transaction, session).ConfigureAwait(false);
                     }
 
                     StoreLastCheckpoint(session, batch.Last());
-                    session.Transaction.Commit();
+                    tx.Commit();
                 }
             }
             catch (ProjectionException projectionException)
