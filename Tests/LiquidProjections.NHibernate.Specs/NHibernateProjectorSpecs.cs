@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Chill;
 using FluentAssertions;
+using FluentAssertions.Extensions;
 using FluentNHibernate.Mapping;
 using LiquidProjections.Abstractions;
 using LiquidProjections.Testing;
@@ -216,7 +217,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductAddedToCatalogEvent>()
-                        .AsCreateIfDoesNotExistOf(@event => @event.ProductKey)
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .IgnoringDuplicates()
                         .Using((projection, @event, context) => projection.Category = @event.Category);
 
                     using (ISession session = The<ISessionFactory>().OpenSession())
@@ -259,7 +261,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductAddedToCatalogEvent>()
-                        .AsCreateIfDoesNotExistOf(@event => @event.ProductKey)
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .IgnoringDuplicates()
                         .Using((projection, @event, context) => projection.Category = @event.Category);
 
                     using (ISession session = The<ISessionFactory>().OpenSession())
@@ -310,7 +313,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductAddedToCatalogEvent>()
-                        .AsCreateIfDoesNotExistOf(@event => @event.ProductKey)
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .IgnoringDuplicates()
                         .Using((projection, @event, context) => projection.Category = @event.Category);
 
                     StartProjecting();
@@ -360,7 +364,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductAddedToCatalogEvent>()
-                        .AsCreateOrUpdateOf(@event => @event.ProductKey)
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .OverwritingDuplicates()
                         .Using((projection, @event, context) => projection.Category = @event.Category);
 
                     using (ISession session = The<ISessionFactory>().OpenSession())
@@ -411,7 +416,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductAddedToCatalogEvent>()
-                        .AsCreateOrUpdateOf(@event => @event.ProductKey)
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .OverwritingDuplicates()
                         .Using((projection, @event, context) => projection.Category = @event.Category);
 
                     using (ISession session = The<ISessionFactory>().OpenSession())
@@ -470,7 +476,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductAddedToCatalogEvent>()
-                        .AsCreateOrUpdateOf(productAddedToCatalogEvent => productAddedToCatalogEvent.ProductKey)
+                        .AsCreateOf(productAddedToCatalogEvent => productAddedToCatalogEvent.ProductKey)
+                        .OverwritingDuplicates()
                         .Using((productCatalogEntry, productAddedToCatalogEvent, context) =>
                             productCatalogEntry.Category = productAddedToCatalogEvent.Category);
 
@@ -613,7 +620,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductMovedToCatalogEvent>()
-                        .AsUpdateIfExistsOf(productMovedToCatalogEvent => productMovedToCatalogEvent.ProductKey)
+                        .AsUpdateOf(productMovedToCatalogEvent => productMovedToCatalogEvent.ProductKey)
+                        .IgnoringMisses()
                         .Using((productCatalogEntry, productMovedToCatalogEvent, context) =>
                             productCatalogEntry.Category = productMovedToCatalogEvent.Category);
 
@@ -655,7 +663,8 @@ namespace LiquidProjections.NHibernate.Specs
                 Given(() =>
                 {
                     Events.Map<ProductMovedToCatalogEvent>()
-                        .AsUpdateIfExistsOf(productMovedToCatalogEvent => productMovedToCatalogEvent.ProductKey)
+                        .AsUpdateOf(productMovedToCatalogEvent => productMovedToCatalogEvent.ProductKey)
+                        .IgnoringMisses()
                         .Using((productCatalogEntry, productMovedToCatalogEvent, context) =>
                             productCatalogEntry.Category = productMovedToCatalogEvent.Category);
 
@@ -780,7 +789,7 @@ namespace LiquidProjections.NHibernate.Specs
             {
                 ProjectionException.Should()
                     .BeOfType<ProjectionException>().Which
-                    .Message.Should().MatchEquivalentOf("Cannot delete*c350E*not exist*");
+                    .Message.Should().MatchEquivalentOf("Could not delete*Entry*c350E*");
             }
         }
 
@@ -866,7 +875,9 @@ namespace LiquidProjections.NHibernate.Specs
                         session.Flush();
                     }
 
-                    Events.Map<ProductDiscontinuedEvent>().AsDeleteIfExistsOf(anEvent => anEvent.ProductKey);
+                    Events.Map<ProductDiscontinuedEvent>()
+                        .AsDeleteOf(anEvent => anEvent.ProductKey)
+                        .IgnoringMisses();
 
                     StartProjecting();
                 });
@@ -904,7 +915,7 @@ namespace LiquidProjections.NHibernate.Specs
             {
                 Given(() =>
                 {
-                    Events.Map<ProductDiscontinuedEvent>().AsDeleteIfExistsOf(e => e.ProductKey);
+                    Events.Map<ProductDiscontinuedEvent>().AsDeleteOf(e => e.ProductKey).IgnoringMisses();
 
                     StartProjecting();
                 });
@@ -921,7 +932,7 @@ namespace LiquidProjections.NHibernate.Specs
             [Fact]
             public void Then_it_should_not_do_anything()
             {
-                action.ShouldNotThrow();
+                action.Should().NotThrow();
             }
         }
 
@@ -938,7 +949,8 @@ namespace LiquidProjections.NHibernate.Specs
                             productCatalogEntry.Category = productMovedToCatalogEvent.Category);
 
                     Events.Map<ProductDiscontinuedEvent>()
-                        .AsDeleteIfExistsOf(productDiscontinuedEvent => productDiscontinuedEvent.ProductKey);
+                        .AsDeleteOf(productDiscontinuedEvent => productDiscontinuedEvent.ProductKey)
+                        .IgnoringMisses();
 
                     var existingEntry = new ProductCatalogEntry
                     {
@@ -1693,7 +1705,7 @@ namespace LiquidProjections.NHibernate.Specs
             [Fact]
             public void Then_it_should_not_handle_the_transactions()
             {
-                WhenAction.ShouldNotThrow();
+                WhenAction.Should().NotThrow();
             }
         }
 

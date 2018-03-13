@@ -39,8 +39,8 @@
     <Reference Include="Chill, Version=3.0.1.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Chill.3.0.1\lib\net45\Chill.dll</HintPath>
     </Reference>
-    <Reference Include="FluentAssertions, Version=1.0.0.0, Culture=neutral, PublicKeyToken=33f2691a05b67b6a, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\FluentAssertions.5.0.0-beta0001\lib\net451\FluentAssertions.dll</HintPath>
+    <Reference Include="FluentAssertions, Version=5.1.1.0, Culture=neutral, PublicKeyToken=33f2691a05b67b6a">
+      <HintPath>..\..\packages\FluentAssertions.5.1.1\lib\net45\FluentAssertions.dll</HintPath>
     </Reference>
     <Reference Include="FluentNHibernate, Version=2.0.3.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\..\packages\FluentNHibernate.2.0.3.0\lib\net40\FluentNHibernate.dll</HintPath>
@@ -50,14 +50,14 @@
       <HintPath>..\..\packages\Iesi.Collections.4.0.0.4000\lib\net40\Iesi.Collections.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="LiquidProjections, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\packages\LiquidProjections.2.3.0\lib\netstandard1.1\LiquidProjections.dll</HintPath>
+    <Reference Include="LiquidProjections, Version=3.0.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.3.0.0\lib\netstandard1.1\LiquidProjections.dll</HintPath>
     </Reference>
-    <Reference Include="LiquidProjections.Abstractions, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\packages\LiquidProjections.Abstractions.2.3.0\lib\netstandard1.1\LiquidProjections.Abstractions.dll</HintPath>
+    <Reference Include="LiquidProjections.Abstractions, Version=3.0.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.Abstractions.3.0.0\lib\netstandard1.1\LiquidProjections.Abstractions.dll</HintPath>
     </Reference>
-    <Reference Include="LiquidProjections.Testing, Version=2.3.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\packages\LiquidProjections.Testing.2.3.0\lib\netstandard1.1\LiquidProjections.Testing.dll</HintPath>
+    <Reference Include="LiquidProjections.Testing, Version=3.0.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\packages\LiquidProjections.Testing.3.0.0\lib\netstandard1.1\LiquidProjections.Testing.dll</HintPath>
     </Reference>
     <Reference Include="NHibernate, Version=4.0.0.4000, Culture=neutral, PublicKeyToken=aa95f207798dfdb4">
       <HintPath>..\..\packages\NHibernate.4.0.4.4000\lib\net40\NHibernate.dll</HintPath>
@@ -68,6 +68,9 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Data.SQLite, Version=1.0.103.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
       <HintPath>..\..\packages\System.Data.SQLite.Core.1.0.103\lib\net451\System.Data.SQLite.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ValueTuple, Version=4.0.1.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51">
+      <HintPath>..\..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
     </Reference>
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
