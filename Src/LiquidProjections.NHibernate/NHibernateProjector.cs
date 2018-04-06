@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Threading.Tasks;
 using LiquidProjections.Abstractions;
 using NHibernate;
@@ -24,7 +25,7 @@ namespace LiquidProjections.NHibernate
         private readonly NHibernateEventMapConfigurator<TProjection, TKey> mapConfigurator;
         private int batchSize = 1;
         private string stateKey = typeof(TProjection).Name;
-        private ShouldRetry shouldRetry = (exception, count) => Task.FromResult(false);
+        private HandleException exceptionHandler = (exception, count) => Task.FromResult(ExceptionResolution.Abort);
 
         /// <summary>
         /// Creates a new instance of <see cref="NHibernateProjector{TProjection,TKey,TState}"/>.
@@ -83,20 +84,20 @@ namespace LiquidProjections.NHibernate
         }
 
         /// <summary>
-        /// A delegate that will be executed when projecting a batch of transactions fails.
-        /// This delegate returns a value that indicates if the action should be retried.
+        /// A delegate that will be executed when projecting a batch of transactions fails
+        /// and which allows the consuming code to decide how to handle the exception. 
         /// </summary>
-        public ShouldRetry ShouldRetry
+        public HandleException ExceptionHandler
         {
-            get => shouldRetry;
-            set => shouldRetry = value ?? throw new ArgumentNullException(nameof(value), "Retry policy is missing.");
+            get => exceptionHandler;
+            set => exceptionHandler = value ?? throw new ArgumentNullException(nameof(value), "Retry policy is missing.");
         }
 
         /// <summary>
         /// Allows enriching the projector state with additional details before the updated state is written to the database.
         /// </summary>
         /// <remarks>
-        /// Is called before the transaction wrapping a batch of transactions is committed.
+        /// Is called within the scope of the NHibernate transaction that is created by <see cref="Handle"/>.
         /// </remarks>
         public EnrichState<TState> EnrichState { get; set; } = (state, transaction) => {};
 
@@ -127,27 +128,53 @@ namespace LiquidProjections.NHibernate
 
             foreach (IList<Transaction> batch in transactionBatches)
             {
-                await ExecuteWithRetry(() => ProjectTransactionBatch(batch)).ConfigureAwait(false);
+                await ProjectUnderPolicy(batch).ConfigureAwait(false);
             }
         }
 
-        private async Task ExecuteWithRetry(Func<Task> action)
+        private async Task ProjectUnderPolicy(IList<Transaction> batch, CancellationToken cancellationToken, int attempts = 0)
         {
-            for (int attempt = 1;; attempt++)
+            bool individualRetry = (attempts > 0);
+            bool retry = false;
+            do
             {
                 try
                 {
-                    await action();
-                    break;
+                    attempts++;
+                    await ProjectTransactionBatch(batch).ConfigureAwait(false);
+                    retry = false;
                 }
                 catch (ProjectionException exception)
                 {
-                    if (!await ShouldRetry(exception, attempt))
+                    ExceptionResolution resolution = await ExceptionHandler(exception, attempts).ConfigureAwait(false);
+                    switch (resolution)
                     {
-                        throw;
+                        case ExceptionResolution.Abort:
+                            throw;
+
+                        case ExceptionResolution.Retry:
+                            retry = true;
+                            break;
+                        
+                        case ExceptionResolution.RetryIndividual:
+                            if (individualRetry)
+                            {
+                                throw new InvalidOperationException("You're already retrying individual transactions");
+                            }
+                            
+                            foreach (Transaction transaction in batch)
+                            {
+                                await ProjectUnderPolicy(new[] {transaction}, cancellationToken, attempts);
+                            }
+
+                            break;
+
+                        case ExceptionResolution.Ignore:
+                            break;
                     }
                 }
             }
+            while (retry);
         }
 
         private async Task ProjectTransactionBatch(IList<Transaction> batch)
@@ -262,10 +289,41 @@ namespace LiquidProjections.NHibernate
     /// A delegate that can be implemented to retry projecting a batch of transactions when it fails.
     /// </summary>
     /// <returns>Returns true if the projector should retry to project the batch of transactions, false if it shoud fail with the specified exception.</returns>
-    /// <param name="exception">The exception that occured that caused this batch to fail.</param>
-    /// <param name="attempts">The number of attempts that were made to project this batch of transactions.</param>
-    public delegate Task<bool> ShouldRetry(ProjectionException exception, int attempts);
+    /// <param name="exception">
+    /// The exception that occured that caused this batch to fail. Notice that the batch of exceptions is exposed through
+    /// <see cref="ProjectionException.TransactionBatch"/>.
+    /// </param>
+    /// <param name="attempts">
+    /// Number of attempts that were made to project this batch of transactions (includes the one that raised the exception).
+    /// </param>
+    public delegate Task<ExceptionResolution> HandleException(ProjectionException exception, int attempts);
 
+    /// <summary>
+    /// Defines the behavior in case the <see cref="NHibernateProjector{TProjection,TKey,TState}"/> throws an exception.
+    /// </summary>
+    public enum ExceptionResolution
+    {
+        /// <summary>
+        /// Ignore the exception and continue with the next batch of <see cref="Transaction"/>s.
+        /// </summary>
+        Ignore,
+        
+        /// <summary>
+        /// Abort the projection attempt and re-throw the original exception back to the caller.
+        /// </summary>
+        Abort,
+        
+        /// <summary>
+        /// Retry the entire batch of <see cref="Transaction"/>s.
+        /// </summary>
+        Retry,
+        
+        /// <summary>
+        /// Retry each <see cref="Transaction"/> one by one, in their own NHIbernate transaction.
+        /// This allows you to trace the exception to an individual exception. 
+        /// </summary>
+        RetryIndividual
+    }
     /// <summary>
     /// Defines the signature of a method that can be used to update the projection state as explained 
     /// in <see cref="NHibernateProjector{TProjection,TKey,TState}.EnrichState"/>.

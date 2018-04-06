@@ -48,10 +48,10 @@ namespace LiquidProjections.NHibernate
             });
         }
 
-        private async Task OnCreate(TKey key, NHibernateProjectionContext context, Func<TProjection, Task> projector, Func<TProjection, bool> shouldoverwite)
+        private async Task OnCreate(TKey key, NHibernateProjectionContext context, Func<TProjection, Task> projector, Func<TProjection, bool> shouldOverwrite)
         {
             TProjection projection = await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
-            if ((projection == null) || shouldoverwite(projection))
+            if ((projection == null) || shouldOverwrite(projection))
             {
                 if (projection == null)
                 {
@@ -64,6 +64,7 @@ namespace LiquidProjections.NHibernate
                 else
                 {
                     // Reattach it to the session
+                    // See also https://stackoverflow.com/questions/2932716/nhibernate-correct-way-to-reattach-cached-entity-to-different-session
                     context.Session.Lock(projection, LockMode.None);
                 }
                 
@@ -71,10 +72,10 @@ namespace LiquidProjections.NHibernate
             }
         }
 
-        private async Task OnUpdate(TKey key, NHibernateProjectionContext context, Func<TProjection, Task> projector, Func<bool> createifmissing)
+        private async Task OnUpdate(TKey key, NHibernateProjectionContext context, Func<TProjection, Task> projector, Func<bool> createIfMissing)
         {
             TProjection projection = await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
-            if ((projection == null) && createifmissing())
+            if ((projection == null) && createIfMissing())
             {
                 projection = new TProjection();
                 setIdentity(projection, key);
