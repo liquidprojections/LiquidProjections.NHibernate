@@ -1356,6 +1356,57 @@ namespace LiquidProjections.NHibernate.Specs
                 ProjectionException.Should().BeNull();
             }
         }
+        
+        #endregion
+        
+        #region Filtering
+        
+        public class When_the_projection_being_updated_doesnt_pass_the_filter :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            public When_the_projection_being_updated_doesnt_pass_the_filter()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsUpdateOf(@event => @event.ProductKey)
+                        .Using((product, @event, _) => product.Category = @event.Category);
+
+                    using (ISession session = The<ISessionFactory>().OpenSession())
+                    {
+                        session.Save(new ProductCatalogEntry
+                        {
+                            Id = "c350E",
+                            Category = "Old Value",
+                            Corrupted = true
+                        });
+                        
+                        session.Flush();
+                    }
+
+                    Subject.Filter = projection => !projection.Corrupted; 
+
+                    StartProjecting();
+                });
+
+                When(() => The<MemoryEventSource>().Write(new ProductAddedToCatalogEvent
+                {
+                    ProductKey = "c350E",
+                    Category = "New Value"
+                }));
+            }
+
+            [Fact]
+            public void Then_it_should_not_update_the_projection()
+            {
+                using (ISession session = The<ISessionFactory>().OpenSession())
+                {
+                    ProductCatalogEntry entry = session.Get<ProductCatalogEntry>("c350E");
+                    entry.Category.Should().Be("Old Value");
+                }
+            }
+        }
+
 
         #endregion
 
@@ -1972,6 +2023,7 @@ namespace LiquidProjections.NHibernate.Specs
             public virtual string Category { get; set; }
             public virtual string AddedBy { get; set; }
             public virtual string Name { get; set; }
+            public virtual bool Corrupted { get; set; }
         }
 
         internal class ProductCatalogEntryClassMap : ClassMap<ProductCatalogEntry>
@@ -1982,6 +2034,7 @@ namespace LiquidProjections.NHibernate.Specs
                 Map(p => p.Category).Nullable().Length(100);
                 Map(p => p.AddedBy).Nullable().Length(100);
                 Map(p => p.Name).Nullable().Unique();
+                Map(p => p.Corrupted).Nullable();
             }
         }
 

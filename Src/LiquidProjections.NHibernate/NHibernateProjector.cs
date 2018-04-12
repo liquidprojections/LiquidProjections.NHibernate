@@ -111,6 +111,15 @@ namespace LiquidProjections.NHibernate
         }
 
         /// <summary>
+        /// Defines a filter that can be used to skip certain projections from being updated.
+        /// </summary>
+        public Predicate<TProjection> Filter
+        {
+            get => mapConfigurator.Filter;
+            set => mapConfigurator.Filter = value ?? throw new ArgumentNullException(nameof(value), "A filter cannot be null");
+        }
+
+        /// <summary>
         /// Instructs the projector to project a collection of ordered transactions asynchronously
         /// in batches of the configured size <see cref="BatchSize"/>.
         /// </summary>
@@ -284,6 +293,14 @@ namespace LiquidProjections.NHibernate
             }
         }
     }
+
+    /// <summary>
+    /// Defines a predicate to filter projections processed through <see cref="NHibernateProjector{TProjection,TKey,TState}.Filter"/>
+    /// </summary>
+    /// <returns>
+    /// Returns <c>true</c> if the projector should update or delete a projection. Should return <c>false</c> otherwise.
+    /// </returns>
+    public delegate bool Predicate<in TProjection>(TProjection projection);
 
     /// <summary>
     /// A delegate that can be implemented to retry projecting a batch of transactions when it fails.

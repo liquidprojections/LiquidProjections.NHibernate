@@ -36,6 +36,8 @@ namespace LiquidProjections.NHibernate
             set => cache = value ?? throw new ArgumentNullException(nameof(value));
         }
 
+        public Predicate<TProjection> Filter { get; set; } = _ => true;
+
         private IEventMap<NHibernateProjectionContext> BuildMap(
             IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder)
         {
@@ -88,7 +90,10 @@ namespace LiquidProjections.NHibernate
                 context.Session.Lock(projection, LockMode.None);
             }
 
-            await projector(projection).ConfigureAwait(false);
+            if (Filter(projection))
+            {
+                await projector(projection).ConfigureAwait(false);
+            }
         }
 
         private async Task<bool> OnDelete(TKey key, NHibernateProjectionContext context)
@@ -116,5 +121,6 @@ namespace LiquidProjections.NHibernate
 
             await map.Handle(anEvent, context).ConfigureAwait(false);
         }
+
     }
 }
