@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Chill;
 using FluentAssertions;
@@ -58,15 +60,17 @@ namespace LiquidProjections.NHibernate.Specs
                 children.Add(childProjector);
             }
 
-            protected void StartProjecting()
+            protected void StartProjecting() => StartProjecting(CancellationToken.None);
+
+            protected void StartProjecting(CancellationToken cancellationToken)
             {
                 The<MemoryEventSource>().Subscribe(0, new Subscriber
                 {
-                    HandleTransactions = async (transactions, info) =>
+                    HandleTransactions = async (transactions, _) =>
                     {
                         try
                         {
-                            await Subject.Handle(transactions, info);
+                            await Subject.Handle(transactions, cancellationToken);
                         }
                         catch (Exception e)
                         {
@@ -1307,7 +1311,6 @@ namespace LiquidProjections.NHibernate.Specs
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
             private ReadOnlyCollection<Transaction> transactions;
-            private SubscriptionInfo info;
 
             public When_retrying_a_transaction_that_was_already_handled()
             {
@@ -1338,15 +1341,13 @@ namespace LiquidProjections.NHibernate.Specs
 
                     transactions = new List<Transaction> {transaction}.AsReadOnly();
 
-                    info = new SubscriptionInfo();
-
                     StartProjecting();
                 });
 
                 When(async () =>
                 {
-                    await Subject.Handle(transactions, info);
-                    await Subject.Handle(transactions, info);
+                    await Subject.Handle(transactions, CancellationToken.None);
+                    await Subject.Handle(transactions, CancellationToken.None);
                 });
             }
 
@@ -1356,11 +1357,117 @@ namespace LiquidProjections.NHibernate.Specs
                 ProjectionException.Should().BeNull();
             }
         }
-        
+
+        public class When_cancelling_in_the_middle_of_a_batch :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            private CancellationTokenSource cancellationRequest = new CancellationTokenSource();
+
+            public When_cancelling_in_the_middle_of_a_batch()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .OverwritingDuplicates()
+                        .Using((p, @event) =>
+                        {
+                            p.Name = @event.Name;
+                            p.Category = @event.Category;
+                        });
+
+                    Events
+                        .Map<CategoryDiscontinuedEvent>()
+                        .As((@event, context) =>
+                        {
+                            cancellationRequest.Cancel();
+                        });
+
+                    StartProjecting(cancellationRequest.Token);
+                });
+
+                When(async () =>
+                {
+                    await The<MemoryEventSource>().Write(
+                        new ProductAddedToCatalogEvent
+                        {
+                            Category = "TheCategory",
+                            ProductKey = "TheProduct",
+                        });
+
+                    await The<MemoryEventSource>().Write(
+                        new CategoryDiscontinuedEvent()
+                        {
+                            Category = "TheCategory",
+                        });
+
+                    await The<MemoryEventSource>().Write(
+                        new ProductAddedToCatalogEvent
+                        {
+                            Category = "AnotherCategory",
+                            ProductKey = "TheProduct",
+                        });
+                });
+            }
+
+            [Fact]
+            public void Then_it_should_rollback_the_transaction()
+            {
+                using (var session = The<ISessionFactory>().OpenSession())
+                {
+                    session.Query<ProductCatalogEntry>().Single().Category.Should().Be("TheCategory");
+                }
+            }
+        }
+
+        public class When_canceling_before_the_first_transaction_is_processed :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            private CancellationTokenSource cancellationRequest = new CancellationTokenSource();
+
+            public When_canceling_before_the_first_transaction_is_processed()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .AsCreateOf(@event => @event.ProductKey)
+                        .OverwritingDuplicates()
+                        .Using((p, @event) =>
+                        {
+                            p.Name = @event.Name;
+                            p.Category = @event.Category;
+                        });
+
+                    StartProjecting(cancellationRequest.Token);
+
+                    cancellationRequest.Cancel();
+                });
+
+                When(async () =>
+                {
+                    await The<MemoryEventSource>().Write(
+                        new ProductAddedToCatalogEvent
+                        {
+                            Category = "TheCategory",
+                            ProductKey = "TheProduct",
+                        });
+                });
+            }
+
+            [Fact]
+            public void Then_it_should_not_handle_any_events_anymore()
+            {
+                using (var session = The<ISessionFactory>().OpenSession())
+                {
+                    session.Query<ProductCatalogEntry>().SingleOrDefault().Should().BeNull();
+                }
+            }
+        }
+
         #endregion
-        
+
         #region Filtering
-        
+
         public class When_the_projection_being_updated_doesnt_pass_the_filter :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1380,7 +1487,7 @@ namespace LiquidProjections.NHibernate.Specs
                             Category = "Old Value",
                             Corrupted = true
                         });
-                        
+
                         session.Flush();
                     }
 
@@ -1406,7 +1513,6 @@ namespace LiquidProjections.NHibernate.Specs
                 }
             }
         }
-
 
         #endregion
 
@@ -1737,7 +1843,7 @@ namespace LiquidProjections.NHibernate.Specs
                 Cache.CurrentCount.Should().Be(0);
             }
         }
-        
+
         public class When_the_exception_handler_requests_to_ignore_any_exceptions :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1754,7 +1860,7 @@ namespace LiquidProjections.NHibernate.Specs
 
                     StartProjecting();
 
-                    Subject.ExceptionHandler = (exception, attempts) =>
+                    Subject.ExceptionHandler = (exception, attempts, cancellationToken) =>
                     {
                         return Task.FromResult(ExceptionResolution.Ignore);
                     };
@@ -1852,7 +1958,7 @@ namespace LiquidProjections.NHibernate.Specs
 
                     StartProjecting();
 
-                    Subject.ExceptionHandler = (exception, attempts) =>
+                    Subject.ExceptionHandler = (exception, attempts, cancellationToken) =>
                     {
                         numberOfAttempts = attempts;
                         if (attempts <= ExpectedNumberOfRetries)
@@ -1923,12 +2029,12 @@ namespace LiquidProjections.NHibernate.Specs
 
                 When(() =>
                 {
-                    transaction1= new TransactionBuilder()
+                    transaction1 = new TransactionBuilder()
                         .WithCheckpointNumber(12)
                         .WithEvent(new CategoryDiscontinuedEvent())
                         .Build();
 
-                    transaction2= new TransactionBuilder()
+                    transaction2 = new TransactionBuilder()
                         .WithCheckpointNumber(34)
                         .WithEvent(new CategoryDiscontinuedEvent())
                         .Build();
@@ -1941,11 +2047,12 @@ namespace LiquidProjections.NHibernate.Specs
             public void Then_it_should_first_receive_the_full_batch_and_then_the_individual_transactions()
             {
                 receivedTransactions.Should().BeEquivalentTo(
-                    new[] {transaction1, transaction2}, 
-                    new[] {transaction1}, 
+                    new[] {transaction1, transaction2},
+                    new[] {transaction1},
                     new[] {transaction2});
             }
         }
+
         public class When_the_exception_handler_requests_a_retry_of_individual_commits_and_then_aborts :
             Given_a_sqlite_projector_with_an_in_memory_event_source
         {
@@ -1966,7 +2073,7 @@ namespace LiquidProjections.NHibernate.Specs
 
                     StartProjecting();
 
-                    Subject.ExceptionHandler = (exception, attempts) =>
+                    Subject.ExceptionHandler = (exception, attempts, cancellationToken) =>
                     {
                         receivedTransactions.Add(exception.TransactionBatch.ToArray());
 
@@ -1983,12 +2090,12 @@ namespace LiquidProjections.NHibernate.Specs
 
                 When(() =>
                 {
-                    transaction1= new TransactionBuilder()
+                    transaction1 = new TransactionBuilder()
                         .WithCheckpointNumber(12)
                         .WithEvent(new CategoryDiscontinuedEvent())
                         .Build();
 
-                    transaction2= new TransactionBuilder()
+                    transaction2 = new TransactionBuilder()
                         .WithCheckpointNumber(34)
                         .WithEvent(new CategoryDiscontinuedEvent())
                         .Build();
@@ -2001,7 +2108,7 @@ namespace LiquidProjections.NHibernate.Specs
             public void Then_it_should_first_receive_the_full_batch_and_then_the_individual_transaction()
             {
                 receivedTransactions.Should().BeEquivalentTo(
-                    new[] {transaction1, transaction2}, 
+                    new[] {transaction1, transaction2},
                     new[] {transaction1});
             }
 
@@ -2010,6 +2117,57 @@ namespace LiquidProjections.NHibernate.Specs
             {
                 ProjectionException.Should().BeOfType<ProjectionException>().Which.InnerException.Should()
                     .BeOfType<InvalidOperationException>();
+            }
+        }
+
+        public class When_the_processing_request_is_canceled_while_the_exception_policy_is_being_executed :
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            private TimeSpan exceptionHandlingTime;
+            private CancellationTokenSource cancellation = new CancellationTokenSource();
+            private ManualResetEventSlim exceptionBeingHandled = new ManualResetEventSlim();
+
+            public When_the_processing_request_is_canceled_while_the_exception_policy_is_being_executed()
+            {
+                Given(() =>
+                {
+                    Events.Map<CategoryDiscontinuedEvent>().As((@event, context) =>
+                    {
+                        throw new InvalidOperationException();
+                    });
+
+                    StartProjecting();
+
+                    Subject.ExceptionHandler = async (exception, attempts, cancellationToken) =>
+                    {
+                        var stopwatch = new Stopwatch();
+                        stopwatch.Start();
+                        
+                        exceptionBeingHandled.Set();
+
+                        await Task.Delay(10.Seconds(), cancellationToken);
+
+                        exceptionHandlingTime = stopwatch.Elapsed;
+
+                        return ExceptionResolution.Ignore;
+                    };
+                });
+
+                When(() =>
+                {
+                    The<MemoryEventSource>().WriteWithoutWaiting(new TransactionBuilder()
+                        .WithEvent(new CategoryDiscontinuedEvent())
+                        .Build());
+
+                    exceptionBeingHandled.Wait();
+                    cancellation.Cancel();
+                });
+            }
+
+            [Fact]
+            public void Then_it_should_cancel_any_long_running_code_in_the_exception_handler()
+            {
+                exceptionHandlingTime.Should().BeLessThan(1.Seconds());
             }
         }
 

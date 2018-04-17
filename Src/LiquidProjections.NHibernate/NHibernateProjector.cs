@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
+using System.Threading;
 using System.Threading.Tasks;
 using LiquidProjections.Abstractions;
 using NHibernate;
@@ -25,7 +26,7 @@ namespace LiquidProjections.NHibernate
         private readonly NHibernateEventMapConfigurator<TProjection, TKey> mapConfigurator;
         private int batchSize = 1;
         private string stateKey = typeof(TProjection).Name;
-        private HandleException exceptionHandler = (exception, count) => Task.FromResult(ExceptionResolution.Abort);
+        private HandleException exceptionHandler = (exception, _, __) => Task.FromResult(ExceptionResolution.Abort);
 
         /// <summary>
         /// Creates a new instance of <see cref="NHibernateProjector{TProjection,TKey,TState}"/>.
@@ -120,10 +121,11 @@ namespace LiquidProjections.NHibernate
         }
 
         /// <summary>
-        /// Instructs the projector to project a collection of ordered transactions asynchronously
-        /// in batches of the configured size <see cref="BatchSize"/>.
+        /// Instructs the projector to project a collection of ordered <paramref name="transactions"/> asynchronously
+        /// in batches of the configured size <see cref="BatchSize"/>. Should cancel its work
+        /// when the <paramref name="cancellationToken"/> is triggered.
         /// </summary>
-        public async Task Handle(IReadOnlyList<Transaction> transactions, SubscriptionInfo subscription)
+        public async Task Handle(IReadOnlyList<Transaction> transactions, CancellationToken cancellationToken)
         {
             if (transactions == null)
             {
@@ -137,8 +139,13 @@ namespace LiquidProjections.NHibernate
 
             foreach (IList<Transaction> batch in transactionBatches)
             {
-                await ProjectUnderPolicy(batch).ConfigureAwait(false);
+                await ProjectUnderPolicy(batch, cancellationToken).ConfigureAwait(false);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
             }
+        }
         }
 
         private async Task ProjectUnderPolicy(IList<Transaction> batch, CancellationToken cancellationToken, int attempts = 0)
@@ -150,12 +157,12 @@ namespace LiquidProjections.NHibernate
                 try
                 {
                     attempts++;
-                    await ProjectTransactionBatch(batch).ConfigureAwait(false);
+                    await ProjectTransactionBatch(batch, cancellationToken).ConfigureAwait(false);
                     retry = false;
                 }
                 catch (ProjectionException exception)
                 {
-                    ExceptionResolution resolution = await ExceptionHandler(exception, attempts).ConfigureAwait(false);
+                    ExceptionResolution resolution = await ExceptionHandler(exception, attempts, cancellationToken).ConfigureAwait(false);
                     switch (resolution)
                     {
                         case ExceptionResolution.Abort:
@@ -186,7 +193,7 @@ namespace LiquidProjections.NHibernate
             while (retry);
         }
 
-        private async Task ProjectTransactionBatch(IList<Transaction> batch)
+        private async Task ProjectTransactionBatch(IList<Transaction> batch, CancellationToken cancellationToken)
         {
             try
             {
@@ -195,12 +202,18 @@ namespace LiquidProjections.NHibernate
                 {
                     foreach (Transaction transaction in batch)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
+
                         await ProjectTransaction(transaction, session).ConfigureAwait(false);
                     }
 
                     StoreLastCheckpoint(session, batch.Last());
                     tx.Commit();
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                Cache.Clear();
             }
             catch (ProjectionException projectionException)
             {
@@ -313,7 +326,10 @@ namespace LiquidProjections.NHibernate
     /// <param name="attempts">
     /// Number of attempts that were made to project this batch of transactions (includes the one that raised the exception).
     /// </param>
-    public delegate Task<ExceptionResolution> HandleException(ProjectionException exception, int attempts);
+    /// <param name="cancellationToken">
+    /// Is requested when the consuming system has canceled the subscription. 
+    /// </param>
+    public delegate Task<ExceptionResolution> HandleException(ProjectionException exception, int attempts, CancellationToken cancellationToken);
 
     /// <summary>
     /// Defines the behavior in case the <see cref="NHibernateProjector{TProjection,TKey,TState}"/> throws an exception.
