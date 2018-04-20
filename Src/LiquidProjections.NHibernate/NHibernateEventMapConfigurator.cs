@@ -36,117 +36,80 @@ namespace LiquidProjections.NHibernate
             set => cache = value ?? throw new ArgumentNullException(nameof(value));
         }
 
+        public Predicate<TProjection> Filter { get; set; } = _ => true;
+
         private IEventMap<NHibernateProjectionContext> BuildMap(
             IEventMapBuilder<TProjection, TKey, NHibernateProjectionContext> mapBuilder)
         {
-            mapBuilder.HandleCustomActionsAs((_, projector) => projector());
-            mapBuilder.HandleProjectionModificationsAs(HandleProjectionModification);
-            mapBuilder.HandleProjectionDeletionsAs(HandleProjectionDeletion);
-            return mapBuilder.Build();
+            return mapBuilder.Build(new ProjectorMap<TProjection, TKey, NHibernateProjectionContext>
+            {
+                Create = OnCreate,
+                Update = OnUpdate,
+                Delete = OnDelete,
+                Custom = (context, projector) => projector()
+            });
         }
 
-        private async Task HandleProjectionModification(TKey key, NHibernateProjectionContext context,
-            Func<TProjection, Task> projector, ProjectionModificationOptions options)
+        private async Task OnCreate(TKey key, NHibernateProjectionContext context, Func<TProjection, Task> projector, Func<TProjection, bool> shouldOverwrite)
         {
             TProjection projection = await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
-            if (projection == null)
+            if ((projection == null) || shouldOverwrite(projection))
             {
-                switch (options.MissingProjectionBehavior)
+                if (projection == null)
                 {
-                    case MissingProjectionModificationBehavior.Create:
-                    {
-                        projection = new TProjection();
-                        setIdentity(projection, key);
+                    projection = new TProjection();
+                    setIdentity(projection, key);
 
-                        await projector(projection).ConfigureAwait(false);
-                        context.Session.Save(projection);
-                        cache.Add(projection);
-                        break;
-                    }
-
-                    case MissingProjectionModificationBehavior.Ignore:
-                    {
-                        break;
-                    }
-
-                    case MissingProjectionModificationBehavior.Throw:
-                    {
-                        throw new ProjectionException(
-                            $"Projection {typeof(TProjection)} with key {key} does not exist.");
-                    }
-
-                    default:
-                    {
-                        throw new NotSupportedException(
-                            $"Not supported missing projection behavior {options.MissingProjectionBehavior}.");
-                    }
+                    context.Session.Save(projection);
+                    cache.Add(projection);
                 }
+                else
+                {
+                    // Reattach it to the session
+                    // See also https://stackoverflow.com/questions/2932716/nhibernate-correct-way-to-reattach-cached-entity-to-different-session
+                    context.Session.Lock(projection, LockMode.None);
+                }
+                
+                await projector(projection).ConfigureAwait(false);
+            }
+        }
+
+        private async Task OnUpdate(TKey key, NHibernateProjectionContext context, Func<TProjection, Task> projector, Func<bool> createIfMissing)
+        {
+            TProjection projection = await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
+            if ((projection == null) && createIfMissing())
+            {
+                projection = new TProjection();
+                setIdentity(projection, key);
+
+                context.Session.Save(projection);
+                cache.Add(projection);
             }
             else
             {
                 context.Session.Lock(projection, LockMode.None);
+            }
 
-                switch (options.ExistingProjectionBehavior)
-                {
-                    case ExistingProjectionModificationBehavior.Update:
-                    {
-                        await projector(projection).ConfigureAwait(false);
-                        break;
-                    }
-
-                    case ExistingProjectionModificationBehavior.Ignore:
-                    {
-                        break;
-                    }
-
-                    case ExistingProjectionModificationBehavior.Throw:
-                    {
-                        throw new ProjectionException(
-                            $"Projection {typeof(TProjection)} with key {key} already exists.");
-                    }
-
-                    default:
-                    {
-                        throw new NotSupportedException(
-                            $"Not supported existing projection behavior {options.ExistingProjectionBehavior}.");
-                    }
-                }
+            if (Filter(projection))
+            {
+                await projector(projection).ConfigureAwait(false);
             }
         }
 
-        private async Task HandleProjectionDeletion(TKey key, NHibernateProjectionContext context,
-            ProjectionDeletionOptions options)
+        private async Task<bool> OnDelete(TKey key, NHibernateProjectionContext context)
         {
             TProjection existingProjection = 
                 await cache.Get(key, () => Task.FromResult(context.Session.Get<TProjection>(key)));
 
-            if (existingProjection == null)
-            {
-                switch (options.MissingProjectionBehavior)
-                {
-                    case MissingProjectionDeletionBehavior.Ignore:
-                    {
-                        break;
-                    }
-
-                    case MissingProjectionDeletionBehavior.Throw:
-                    {
-                        throw new ProjectionException(
-                            $"Cannot delete {typeof(TProjection)} projection with key {key}. The projection does not exist.");
-                    }
-
-                    default:
-                    {
-                        throw new NotSupportedException(
-                            $"Not supported missing projection behavior {options.MissingProjectionBehavior}.");
-                    }
-                }
-            }
-            else
+            if (existingProjection != null)
             {
                 context.Session.Delete(existingProjection);
                 cache.Remove(key);
+
+                return true;
             }
+
+            return false;
         }
 
         public async Task ProjectEvent(object anEvent, NHibernateProjectionContext context)
@@ -158,5 +121,6 @@ namespace LiquidProjections.NHibernate
 
             await map.Handle(anEvent, context).ConfigureAwait(false);
         }
+
     }
 }
