@@ -734,7 +734,8 @@ namespace LiquidProjections.NHibernate.Specs
                     {
                         var entry = new ProductCatalogEntry
                         {
-                            Id = "c350E"
+                            Id = "c350E",
+                            Category = "Irrelevant"
                         };
 
                         session.Save(entry);
@@ -872,8 +873,10 @@ namespace LiquidProjections.NHibernate.Specs
                     {
                         var entry = new ProductCatalogEntry
                         {
-                            Id = "c350E"
+                            Id = "c350E",
+                            Category = "Irrelevant"
                         };
+                        
                         session.Save(entry);
 
                         Cache.Add(entry);
@@ -2188,8 +2191,8 @@ namespace LiquidProjections.NHibernate.Specs
         {
             public ProductCatalogEntryClassMap()
             {
-                Id(p => p.Id).Not.Nullable().Length(100);
-                Map(p => p.Category).Nullable().Length(100);
+                Id(p => p.Id).Not.Nullable().Length(100).Not.Nullable();
+                Map(p => p.Category).Nullable().Length(100).Not.Nullable();
                 Map(p => p.AddedBy).Nullable().Length(100);
                 Map(p => p.Name).Nullable().Unique();
                 Map(p => p.Corrupted).Nullable();
@@ -2206,8 +2209,8 @@ namespace LiquidProjections.NHibernate.Specs
         {
             public ProductCatalogChildEntryClassMap()
             {
-                Id(p => p.Id).Not.Nullable().Length(100);
-                Map(p => p.Category).Nullable().Length(100);
+                Id(p => p.Id).Not.Nullable().Length(100).Not.Nullable();
+                Map(p => p.Category).Nullable().Length(100).Not.Nullable();
             }
         }
 
