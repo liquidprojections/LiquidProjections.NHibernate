@@ -59,6 +59,7 @@ namespace LiquidProjections.NHibernate
                 {
                     projection = new TProjection();
                     setIdentity(projection, key);
+                    await projector(projection).ConfigureAwait(false);
 
                     context.Session.Save(projection);
                     cache.Add(projection);
@@ -68,9 +69,8 @@ namespace LiquidProjections.NHibernate
                     // Reattach it to the session
                     // See also https://stackoverflow.com/questions/2932716/nhibernate-correct-way-to-reattach-cached-entity-to-different-session
                     context.Session.Lock(projection, LockMode.None);
+                    await projector(projection).ConfigureAwait(false);
                 }
-                
-                await projector(projection).ConfigureAwait(false);
             }
         }
 
@@ -82,17 +82,17 @@ namespace LiquidProjections.NHibernate
                 projection = new TProjection();
                 setIdentity(projection, key);
 
+                await projector(projection).ConfigureAwait(false);
                 context.Session.Save(projection);
                 cache.Add(projection);
             }
             else
             {
-                context.Session.Lock(projection, LockMode.None);
-            }
-
-            if (Filter(projection))
-            {
-                await projector(projection).ConfigureAwait(false);
+                if (Filter(projection))
+                {
+                    context.Session.Lock(projection, LockMode.None);
+                    await projector(projection).ConfigureAwait(false);
+                }
             }
         }
 
