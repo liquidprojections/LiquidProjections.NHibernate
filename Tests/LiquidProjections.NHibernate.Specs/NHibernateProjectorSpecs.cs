@@ -625,7 +625,7 @@ namespace LiquidProjections.NHibernate.Specs
             {
                 Given(() =>
                 {
-                    Events.Map<ProductMovedToCatalogEvent>()
+                    Events.Map<ProductAddedToCatalogEvent>()
                         .AsUpdateOf(productMovedToCatalogEvent => productMovedToCatalogEvent.ProductKey)
                         .IgnoringMisses()
                         .Using((productCatalogEntry, productMovedToCatalogEvent, context) =>
@@ -656,6 +656,12 @@ namespace LiquidProjections.NHibernate.Specs
             {
                 var cachedItem = await Cache.Get("c350E", () => Task.FromResult<ProductCatalogEntry>(null));
                 cachedItem.Should().BeNull();
+            }
+
+            [Fact]
+            public void And_it_should_throw_any_exceptions()
+            {
+                ProjectionException.Should().BeNull();
             }
         }
 

@@ -88,7 +88,7 @@ namespace LiquidProjections.NHibernate
             }
             else
             {
-                if (Filter(projection))
+                if (projection != null && Filter(projection))
                 {
                     context.Session.Lock(projection, LockMode.None);
                     await projector(projection).ConfigureAwait(false);
