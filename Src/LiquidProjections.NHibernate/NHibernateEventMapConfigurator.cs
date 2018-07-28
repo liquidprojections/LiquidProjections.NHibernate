@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Threading.Tasks;
 using NHibernate;
-using NHibernate.Util;
 
 namespace LiquidProjections.NHibernate
 {
@@ -119,8 +117,7 @@ namespace LiquidProjections.NHibernate
                 await child.ProjectEvent(anEvent, context).ConfigureAwait(false);
             }
 
-            await map.Handle(anEvent, context).ConfigureAwait(false);
+            context.WasHandled = await map.Handle(anEvent, context).ConfigureAwait(false);
         }
-
     }
 }

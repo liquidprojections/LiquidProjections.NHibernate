@@ -14,7 +14,7 @@ using LiquidProjections.Testing;
 using NHibernate;
 using NHibernate.Linq;
 using Xunit;
-using Xunit.Sdk;
+
 #pragma warning disable 1998
 
 namespace LiquidProjections.NHibernate.Specs
@@ -1094,7 +1094,8 @@ namespace LiquidProjections.NHibernate.Specs
             [Fact]
             public void And_it_should_have_created_the_context()
             {
-                context.Should().BeEquivalentTo(new NHibernateProjectionContext
+                context.Should().BeOfType<NHibernateProjectionContext>();
+                context.Should().BeEquivalentTo(new
                 {
                     Checkpoint = 111,
                     TransactionId = "MyTransactionId",
@@ -1107,8 +1108,9 @@ namespace LiquidProjections.NHibernate.Specs
                     EventHeaders = new Dictionary<string, object>
                     {
                         ["Some event header"] = "Some event header value"
-                    }
-                }, options => options.Excluding(c => c.Session));
+                    },
+                    WasHandled = true
+                });
             }
         }
 
@@ -1224,6 +1226,132 @@ namespace LiquidProjections.NHibernate.Specs
             }
         }
 
+        public class When_the_projector_only_persists_the_state_for_dirty_batches : 
+            Given_a_sqlite_projector_with_an_in_memory_event_source
+        {
+            private ProjectorState projectorStateAfterFirstBatch;
+            private ProjectorState projectorStateAfterSecondBatch;
+            private Transaction[] transactions;
+            private const int BatchSize = 5;
+
+            public When_the_projector_only_persists_the_state_for_dirty_batches()
+            {
+                Given(() =>
+                {
+                    Events.Map<ProductAddedToCatalogEvent>()
+                        .As((productAddedToCatalogEvent, context) =>
+                        {
+                            using (var session = The<ISessionFactory>().OpenSession())
+                            {
+                                projectorStateAfterFirstBatch = session.Get<ProjectorState>(Subject.StateKey);
+                            }
+                        });
+                    
+                    Events.Map<CategoryDiscontinuedEvent>()
+                        .As((productAddedToCatalogEvent, context) =>
+                        {
+                            using (var session = The<ISessionFactory>().OpenSession())
+                            {
+                                projectorStateAfterSecondBatch = session.Get<ProjectorState>(Subject.StateKey);
+                            }
+                        });
+
+                    Subject.PersistStateBehavior = PersistStateBehavior.DirtyBatch;
+                    Subject.BatchSize = BatchSize;
+
+                    StartProjecting();
+                });
+
+                When(() =>
+                {
+                    Transaction[] firstBatchWithoutHandledEvents = {
+                        new Transaction { Checkpoint = 10 },
+                        new Transaction { Checkpoint = 11 },
+                        new Transaction { Checkpoint = 12 },
+                        new Transaction { Checkpoint = 13 },
+                        new Transaction { Checkpoint = 14 }
+                    };
+                    
+                    Transaction[] secondBatchWithHandledEvents = {
+                        new Transaction { Checkpoint = 15 },
+                        new Transaction { Checkpoint = 16 },
+                        new Transaction
+                        {
+                            Checkpoint = 17,
+                            Events = new[]
+                            {
+                                new EventEnvelope
+                                {
+                                    Body = new ProductAddedToCatalogEvent
+                                        {
+                                            ProductKey = "c350E",
+                                            Category = "Hybrid"
+                                        }
+                                }
+                            }
+                        },
+                        new Transaction { Checkpoint = 18 },
+                        new Transaction { Checkpoint = 19 }
+                    };
+                    
+                    Transaction[] thirdBatchWithHandledEvents = {
+                        new Transaction { Checkpoint = 20 },
+                        new Transaction { Checkpoint = 21 },
+                        new Transaction
+                        {
+                            Checkpoint = 22,
+                            Events = new[]
+                            {
+                                new EventEnvelope
+                                {
+                                    Body = new CategoryDiscontinuedEvent
+                                        {
+                                            Category = "Hybrid"
+                                        }
+                                }
+                            }
+                        },
+                        new Transaction { Checkpoint = 23 },
+                        new Transaction { Checkpoint = 24 }
+                    };
+                    
+                    Transaction[] fourthPartialBatchWithoutHandledEvents = {
+                        new Transaction { Checkpoint = 25 },
+                        new Transaction { Checkpoint = 26 }
+                    };
+
+                    transactions = firstBatchWithoutHandledEvents
+                        .Concat(secondBatchWithHandledEvents)
+                        .Concat(thirdBatchWithHandledEvents)
+                        .Concat(fourthPartialBatchWithoutHandledEvents)
+                        .ToArray();
+                    
+                    return The<MemoryEventSource>().Write(transactions);
+                });
+            }
+
+            [Fact]
+            public void Then_it_should_not_store_the_projector_state_after_a_batch_without_events_that_are_handled()
+            {
+                projectorStateAfterFirstBatch.Should().BeNull();
+            }
+
+            [Fact]
+            public void Then_it_should_store_the_projector_state_after_a_batch_with_events_that_are_handled()
+            {
+                projectorStateAfterSecondBatch.Checkpoint.Should().Be(19);
+            }
+
+            [Fact]
+            public void Then_it_should_store_projector_state_after_the_last_batch()
+            {
+                using (var session = The<ISessionFactory>().OpenSession())
+                {
+                    ProjectorState projectorState = session.Get<ProjectorState>(Subject.StateKey);
+                    projectorState.Checkpoint.Should().Be(transactions.Max(t => t.Checkpoint));
+                }
+            }
+        }
 
         public class When_an_event_has_a_header : Given_a_sqlite_projector_with_an_in_memory_event_source
         {
